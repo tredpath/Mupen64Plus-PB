@@ -44,9 +44,10 @@
 #include "osal_preproc.h"
 #include "ui-sdl.h"
 #include "SDL.h"
+#include "touch.h"
 #include <screen/screen.h>
 
-#include "../bbutil/bbutil.h"
+#include "bbutil.h"
 
 /** global variables **/
 int    g_Verbose = 1;
@@ -82,14 +83,14 @@ screen_context_t screen_cxt;
 
 void DebugCallback(void *Context, int level, const char *message)
 {
-    if (level <= 1)
+    /*if (level <= 1)
         printf("%s Error: %s\n", (const char *) Context, message);
     else if (level == 2)
         printf("%s Warning: %s\n", (const char *) Context, message);
     else if (level == 3 || (level == 5 && g_Verbose))
         printf("%s: %s\n", (const char *) Context, message);
     else if (level == 4)
-        printf("%s Status: %s\n", (const char *) Context, message);
+        printf("%s Status: %s\n", (const char *) Context, message);*/
     /* ignore the verbose info for now */
 }
 
@@ -113,6 +114,7 @@ static void FrameCallback(unsigned int FrameIndex)
         }
     }
 }
+
 /*********************************************************************************************************
  *  Configuration handling
  */
@@ -371,6 +373,38 @@ static int ParseCommandLineInitial(int argc, const char **argv)
     return 0;
 }
 
+void getCheats(int *size, bb_cheat* list)
+{
+	char numCheats = 0;
+	CheatStart(CHEAT_SHOW_LIST, &numCheats);
+	fflush(stdout);
+	int retsize = 0;
+
+	sCheatInfo *pCur = l_CheatList;
+	while (pCur != NULL)
+	{
+		if (pCur->VariableLine == -1)
+		{
+			strncpy(list[retsize].Name, pCur->Name, 125);
+			list[retsize].number = pCur->Number;
+			retsize++;
+		}
+		pCur = pCur->Next;
+	}
+
+	CheatFreeAll();
+	*size = retsize;
+}
+
+void doCommand(int cmd, int val, void* data)
+{
+	if (cmd == M64CMD_STATE_SAVE)
+		touch_save = 1.0f;
+	else if (cmd == M64CMD_STATE_LOAD)
+		touch_load = 1.0f;
+	(*CoreDoCommand)((m64p_command)cmd, val, data);
+}
+
 static m64p_error ParseCommandLineFinal(int argc, const char **argv)
 {
     int i;
@@ -538,7 +572,7 @@ void zeldaSubscreenHack()
     		{
     			printf("Found Zelda! using subscreen cheat!\n");
 				l_CheatMode = CHEAT_LIST;
-				l_CheatNumList = "0";
+				l_CheatNumList = "0,";
 				return;
     		}
     	}
@@ -554,12 +588,13 @@ int main(int argc, char *argv[])
     int i;
 
     printf(" __  __                            __   _  _   ____  _             \n");
-    printf("|  \\/  |_   _ _ __    ___ _ __  / /_ | || | |  _ \\| |_   _ ___ \n");
+    printf("|  \\/  |_   _ _ __    ___ _ __ / /_ | || | |  _ \\| |_   _ ___ \n");
     printf("| |\\/| | | | | '_ \\ / _ \\ '_ \\| '_ \\| || |_| |_) | | | | / __|  \n");
     printf("| |  | | |_| | |_) |  __/ | | | (_) |__   _|  __/| | |_| \\__ \\  \n");
     printf("|_|  |_|\\__,_| .__/ \\___|_| |_|\\___/  |_| |_|   |_|\\__,_|___/  \n");
     printf("              |_|         http://code.google.com/p/mupen64plus/  \n");
     printf("%s Version %i.%i.%i\n\n", CONSOLE_UI_NAME, VERSION_PRINTF_SPLIT(CONSOLE_UI_VERSION));
+    fflush(stdout);
 
     if(access("shared/misc/n64/", F_OK) != 0){
     	mkdir("shared/misc/n64/", S_IRWXU | S_IRWXG);
@@ -570,6 +605,7 @@ int main(int argc, char *argv[])
 #ifdef TOUCHPAD_UI
     char* arguments[20];
     int argi = 0;
+    int showCheatMenu = 0;
 
 load_new_rom:
     argi = 0;
@@ -614,11 +650,12 @@ load_new_rom:
     }
 
 #ifdef TOUCHPAD_UI
-    if(romName[0] == NULL){
-    const char* currentVideo = ConfigGetParamString(l_ConfigUI,"VideoPlugin");
-    videoPlugin = strstr(currentVideo,"rice") == NULL ? VIDEO_PLUGIN_GLES2N64 : VIDEO_PLUGIN_RICE;
+    if(romName[0] == NULL)
+    {
+		const char* currentVideo = ConfigGetParamString(l_ConfigUI,"VideoPlugin");
+		videoPlugin = strstr(currentVideo,"rice") == NULL ? VIDEO_PLUGIN_GLES2N64 : VIDEO_PLUGIN_RICE;
 
-    int rc = -1;
+		int rc = -1;
 
     	printf("One time init!\n");fflush(stdout);
 		screen_create_context(&screen_cxt, 0);
@@ -638,6 +675,7 @@ load_new_rom:
 
 		//char* romName = UIChooseRom(&disableSound,&videoPlugin);
 
+		dialog_set_cheat_callback(&getCheats);
     	rc = dialog_select_game(romName, "shared/misc/n64/roms/", &videoPlugin, &disableSound);
 
 		if(rc < 0){
@@ -646,7 +684,11 @@ load_new_rom:
 			DetachCoreLib();
 			return 5;
 		}
-    } else {
+		else if (rc == 1)
+			showCheatMenu = 1;
+    }
+    else
+    {
     	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     	glClear(GL_COLOR_BUFFER_BIT);
     	PB_eglSwapBuffers();
@@ -674,6 +716,12 @@ load_new_rom:
     	arguments[argi++] = "--gfx";
     	arguments[argi++] = "libmupen64plus-video-rice";
     	//arguments[argi++] = "dummy";
+    }
+    else if (videoPlugin == VIDEO_PLUGIN_GLIDE)
+    {
+    	printf("Using gles2glide...\n");fflush(stdout);
+    	arguments[argi++] = "--gfx";
+    	arguments[argi++] = "mupen64plus-video-glide64mk2";
     }
     else
     {
@@ -762,10 +810,19 @@ load_new_rom:
     }
     free(ROM_buffer); /* the core copies the ROM image, so we can release this buffer immediately */
 
-
-
+    EmuDoCommand = &doCommand;
     /* handle the cheat codes */
-    zeldaSubscreenHack();
+    if (showCheatMenu)
+    {
+    	l_CheatNumList = (char*)malloc(2048 * sizeof(char));
+        if (dialog_cheat(l_CheatNumList) > 0)
+        {
+        	l_CheatMode = CHEAT_LIST;
+        }
+    }
+    else
+    	zeldaSubscreenHack();
+
     CheatStart(l_CheatMode, l_CheatNumList);
     if (l_CheatMode == CHEAT_SHOW_LIST)
     {
