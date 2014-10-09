@@ -19,7 +19,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <exception>
 #include <cmath>
-#include <math.h>
 
 #include "ConvertImage.h"
 #include "DeviceBuilder.h"
@@ -33,12 +32,14 @@ unsigned int g_maxTextureMemUsage = (5*1024*1024);
 unsigned int g_amountToFree = (512*1024);
 bool g_bUseSetTextureMem = false;
 
+#ifdef __QNXNTO__
+using namespace std;
+#endif
+
 // Returns the first prime greater than or equal to nFirst
 inline int GetNextPrime(int nFirst)
 {
     int nCurrent;
-
-    int i;
 
     nCurrent = nFirst;
 
@@ -54,11 +55,10 @@ inline int GetNextPrime(int nFirst)
         // nSqrtCurrent = nCurrent^0.5 + 1 (round up)
         nSqrtCurrent = (int)sqrt((double)nCurrent) + 1;
 
-
         bIsComposite = FALSE;
         
         // Test all odd numbers from 3..nSqrtCurrent
-        for (i = 3; i <= nSqrtCurrent; i+=2)
+        for (int i = 3; i <= nSqrtCurrent; i+=2)
         {
             if ((nCurrent % i) == 0)
             {
@@ -75,7 +75,6 @@ inline int GetNextPrime(int nFirst)
         // Select next odd candidate...
         nCurrent += 2;
     }
-
 }
 
 
@@ -125,13 +124,13 @@ bool CTextureManager::CleanUp()
 
     if (!g_bUseSetTextureMem)
     {
-    while (m_pHead)
-    {
-        TxtrCacheEntry * pVictim = m_pHead;
-        m_pHead = pVictim->pNext;
+        while (m_pHead)
+        {
+            TxtrCacheEntry * pVictim = m_pHead;
+            m_pHead = pVictim->pNext;
 
-        delete pVictim;
-    }
+            delete pVictim;
+        }
     }
 
     if( m_blackTextureEntry.pTexture )      delete m_blackTextureEntry.pTexture;    
@@ -150,11 +149,13 @@ bool CTextureManager::CleanUp()
 
 bool CTextureManager::TCacheEntryIsLoaded(TxtrCacheEntry *pEntry)
 {
-  for (int i = 0; i < MAX_TEXTURES; i++)
-    if (g_textures[i].pTextureEntry == pEntry)
-      return true;
+    for (int i = 0; i < MAX_TEXTURES; i++)
+    {
+        if (g_textures[i].pTextureEntry == pEntry)
+            return true;
+    }
 
-  return false;
+    return false;
 }
 
 // Purge any textures whos last usage was over 5 seconds ago
@@ -411,7 +412,7 @@ TxtrCacheEntry * CTextureManager::GetTxtrCacheEntry(TxtrInfo * pti)
         {
             MakeTextureYoungest(pEntry);
             return pEntry;
-    }
+        }
     }
 
     return NULL;
@@ -695,7 +696,7 @@ TxtrCacheEntry * CTextureManager::GetTexture(TxtrInfo * pgti, bool fromTMEM, boo
         }
         else
         {
-            ; //Do something
+            //Do something
         }
     }
 
@@ -719,23 +720,23 @@ TxtrCacheEntry * CTextureManager::GetTexture(TxtrInfo * pgti, bool fromTMEM, boo
     pEntry->bExternalTxtrChecked = false;
     pEntry->maxCI = maxCI;
 
-    if( pEntry->pTexture->m_dwCreatedTextureWidth < pgti->WidthToCreate )
-    {
-        pEntry->ti.WidthToLoad = pEntry->pTexture->m_dwCreatedTextureWidth;
-        pEntry->pTexture->m_bScaledS = false;
-        pEntry->pTexture->m_bScaledT = false;
-    }
-    if( pEntry->pTexture->m_dwCreatedTextureHeight < pgti->HeightToCreate )
-    {
-        pEntry->ti.HeightToLoad = pEntry->pTexture->m_dwCreatedTextureHeight;
-        pEntry->pTexture->m_bScaledT = false;
-        pEntry->pTexture->m_bScaledS = false;
-    }
-
     try 
     {
         if (pEntry->pTexture != NULL)
         {
+            if( pEntry->pTexture->m_dwCreatedTextureWidth < pgti->WidthToCreate )
+            {
+                pEntry->ti.WidthToLoad = pEntry->pTexture->m_dwCreatedTextureWidth;
+                pEntry->pTexture->m_bScaledS = false;
+                pEntry->pTexture->m_bScaledT = false;
+            }
+            if( pEntry->pTexture->m_dwCreatedTextureHeight < pgti->HeightToCreate )
+            {
+                pEntry->ti.HeightToLoad = pEntry->pTexture->m_dwCreatedTextureHeight;
+                pEntry->pTexture->m_bScaledT = false;
+                pEntry->pTexture->m_bScaledS = false;
+            }
+            
             TextureFmt dwType = pEntry->pTexture->GetSurfaceFormat();
             SAFE_DELETE(pEntry->pEnhancedTexture);
             pEntry->dwEnhancementFlag = TEXTURE_NO_ENHANCEMENT;
@@ -1543,6 +1544,7 @@ void ConvertTextureRGBAtoI(TxtrCacheEntry* pEntry, bool alpha)
                 buf[nX] = (a|(i<<16)|(i<<8)|i);
             }
         }
-        pEntry->pTexture->EndUpdate(&srcInfo);  }
+        pEntry->pTexture->EndUpdate(&srcInfo);
+    }
 }
 

@@ -32,7 +32,7 @@ OBJDIR = _obj
 
 # base CFLAGS, LDLIBS, and LDFLAGS
 OPTFLAGS ?= -O3
-CFLAGS += $(OPTFLAGS) -Wall -ffast-math -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR)
+CFLAGS += $(OPTFLAGS) -Wall -ffast-math -fno-strict-aliasing -fvisibility=hidden -I$(SRCDIR) -marm -fPIC
 CXXFLAGS += -fvisibility-inlines-hidden
 LDFLAGS += $(SHARED)
 
@@ -71,7 +71,7 @@ ifeq ($(OS), LINUX)
   LDFLAGS += -Wl,-version-script,$(SRCDIR)/video_api_export.ver
   ifeq ($(CPU),ARM)
     #headers for palm, sdl, libpng
-    CFLAGS += -I../blackberry-SDL/include -IC:\bbndk-2.1.0-beta1\target\qnx6/usr/include/freetype2
+    CFLAGS += -I../blackberry-SDL/include -IJ:\bbndk-2.1.0\target\qnx6/usr/include/freetype2
     #todo add libpng header dir
     CFLAGS += -DGLES_2 -DPRE
     LDLIBS += -L../libs -lGLESv2 -lpng -lSDL12 -lbbutil
@@ -113,7 +113,7 @@ else
   endif
 endif
 
-CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk-2.1.0/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p
@@ -148,12 +148,6 @@ endif
 
 # list of source files to compile
 SOURCE = \
-	$(SRCDIR)/liblinux/BMGImage.c \
-	$(SRCDIR)/liblinux/BMGUtils.cpp \
-	$(SRCDIR)/liblinux/bmp.c \
-	$(SRCDIR)/liblinux/pngrw.c \
-	$(SRCDIR)/osal_dynamiclib_unix.c \
-	$(SRCDIR)/osal_files_unix.c \
 	$(SRCDIR)/Blender.cpp \
 	$(SRCDIR)/Combiner.cpp \
 	$(SRCDIR)/CombinerTable.cpp \
@@ -162,8 +156,8 @@ SOURCE = \
 	$(SRCDIR)/ConvertImage16.cpp \
 	$(SRCDIR)/Debugger.cpp \
 	$(SRCDIR)/DecodedMux.cpp \
-	$(SRCDIR)/DirectXDecodedMux.cpp \
 	$(SRCDIR)/DeviceBuilder.cpp \
+	$(SRCDIR)/DirectXDecodedMux.cpp \
 	$(SRCDIR)/FrameBuffer.cpp \
 	$(SRCDIR)/GeneralCombiner.cpp \
 	$(SRCDIR)/GraphicsContext.cpp \
@@ -171,7 +165,7 @@ SOURCE = \
 	$(SRCDIR)/OGLDecodedMux.cpp \
 	$(SRCDIR)/OGLExtCombiner.cpp \
 	$(SRCDIR)/OGLExtRender.cpp \
-	$(SRCDIR)/OGLFragmentShaders.cpp \
+    $(SRCDIR)/OGLES2FragmentShaders.cpp \
 	$(SRCDIR)/OGLGraphicsContext.cpp \
 	$(SRCDIR)/OGLRender.cpp \
 	$(SRCDIR)/OGLRenderExt.cpp \
@@ -190,7 +184,12 @@ SOURCE = \
 	$(SRCDIR)/TextureManager.cpp \
 	$(SRCDIR)/VectorMath.cpp \
 	$(SRCDIR)/Video.cpp \
-	#$(SRCDIR)/bbutil.c
+	$(SRCDIR)/osal_dynamiclib_unix.c \
+	$(SRCDIR)/osal_files_unix.c \
+	$(SRCDIR)/liblinux/BMGImage.c \
+	$(SRCDIR)/liblinux/BMGUtils.cpp \
+	$(SRCDIR)/liblinux/bmp.c \
+	$(SRCDIR)/liblinux/pngrw.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))

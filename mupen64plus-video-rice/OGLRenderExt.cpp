@@ -16,7 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
-#include "OGLPlatform.h"
+#include "osal_opengl.h"
 
 #include "OGLRender.h"
 
@@ -37,55 +37,91 @@ void OGLRender::DrawSpriteR_Render()    // With Rotation
     GLboolean cullface = glIsEnabled(GL_CULL_FACE);
     glDisable(GL_CULL_FACE);
 
-    //glColor4fv(gRDP.fvPrimitiveColor);
+#if SDL_VIDEO_OPENGL
 
+    glBegin(GL_TRIANGLES);
+    glColor4fv(gRDP.fvPrimitiveColor);
 
+    OGLRender::TexCoord(g_texRectTVtx[0]);
+    glVertex3f(g_texRectTVtx[0].x, g_texRectTVtx[0].y, -g_texRectTVtx[0].z);
+
+    OGLRender::TexCoord(g_texRectTVtx[1]);
+    glVertex3f(g_texRectTVtx[1].x, g_texRectTVtx[1].y, -g_texRectTVtx[1].z);
+
+    OGLRender::TexCoord(g_texRectTVtx[2]);
+    glVertex3f(g_texRectTVtx[2].x, g_texRectTVtx[2].y, -g_texRectTVtx[2].z);
+
+    OGLRender::TexCoord(g_texRectTVtx[0]);
+    glVertex3f(g_texRectTVtx[0].x, g_texRectTVtx[0].y, -g_texRectTVtx[0].z);
+
+    OGLRender::TexCoord(g_texRectTVtx[2]);
+    glVertex3f(g_texRectTVtx[2].x, g_texRectTVtx[2].y, -g_texRectTVtx[2].z);
+
+    OGLRender::TexCoord(g_texRectTVtx[3]);
+    glVertex3f(g_texRectTVtx[3].x, g_texRectTVtx[3].y, -g_texRectTVtx[3].z);
+
+    glEnd();
+
+#elif SDL_VIDEO_OPENGL_ES2
 
     GLfloat colour[] = {
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
 
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
-    		gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
+            gRDP.fvPrimitiveColor[0], gRDP.fvPrimitiveColor[1], gRDP.fvPrimitiveColor[2], gRDP.fvPrimitiveColor[3],
     };
 
-	GLfloat tex[] = {
-			g_texRectTVtx[0].tcord[0].u,g_texRectTVtx[0].tcord[0].v,
-			g_texRectTVtx[1].tcord[0].u,g_texRectTVtx[1].tcord[0].v,
-			g_texRectTVtx[2].tcord[0].u,g_texRectTVtx[2].tcord[0].v,
+    GLfloat tex[] = {
+            g_texRectTVtx[0].tcord[0].u,g_texRectTVtx[0].tcord[0].v,
+            g_texRectTVtx[1].tcord[0].u,g_texRectTVtx[1].tcord[0].v,
+            g_texRectTVtx[2].tcord[0].u,g_texRectTVtx[2].tcord[0].v,
 
-			g_texRectTVtx[0].tcord[0].u,g_texRectTVtx[0].tcord[0].v,
-			g_texRectTVtx[2].tcord[0].u,g_texRectTVtx[2].tcord[0].v,
-			g_texRectTVtx[3].tcord[0].u,g_texRectTVtx[3].tcord[0].v,
-	};
+            g_texRectTVtx[0].tcord[0].u,g_texRectTVtx[0].tcord[0].v,
+            g_texRectTVtx[2].tcord[0].u,g_texRectTVtx[2].tcord[0].v,
+            g_texRectTVtx[3].tcord[0].u,g_texRectTVtx[3].tcord[0].v,
+    };
 
-	 float w = windowSetting.uDisplayWidth / 2.0f, h = windowSetting.uDisplayHeight / 2.0f, inv = 1.0f;
+    GLfloat tex2[] = {
+            g_texRectTVtx[0].tcord[1].u,g_texRectTVtx[0].tcord[1].v,
+            g_texRectTVtx[1].tcord[1].u,g_texRectTVtx[1].tcord[1].v,
+            g_texRectTVtx[2].tcord[1].u,g_texRectTVtx[2].tcord[1].v,
 
-	GLfloat vertices[] = {
-			-inv + g_texRectTVtx[0].x/ w, inv - g_texRectTVtx[0].y/ h, -g_texRectTVtx[0].z,1,
-			-inv + g_texRectTVtx[1].x/ w, inv - g_texRectTVtx[1].y/ h, -g_texRectTVtx[1].z,1,
-			-inv + g_texRectTVtx[2].x/ w, inv - g_texRectTVtx[2].y/ h, -g_texRectTVtx[2].z,1,
+            g_texRectTVtx[0].tcord[1].u,g_texRectTVtx[0].tcord[1].v,
+            g_texRectTVtx[2].tcord[1].u,g_texRectTVtx[2].tcord[1].v,
+            g_texRectTVtx[3].tcord[1].u,g_texRectTVtx[3].tcord[1].v,
+    };
 
-			-inv + g_texRectTVtx[0].x/ w, inv - g_texRectTVtx[0].y/ h, -g_texRectTVtx[0].z,1,
-			-inv + g_texRectTVtx[2].x/ w, inv - g_texRectTVtx[2].y/ h, -g_texRectTVtx[2].z,1,
-			-inv + g_texRectTVtx[3].x/ w, inv - g_texRectTVtx[3].y/ h, -g_texRectTVtx[3].z,1
-	};
+     float w = windowSetting.uDisplayWidth / 2.0f, h = windowSetting.uDisplayHeight / 2.0f, inv = 1.0f;
+
+    GLfloat vertices[] = {
+            -inv + g_texRectTVtx[0].x/ w, inv - g_texRectTVtx[0].y/ h, -g_texRectTVtx[0].z,1,
+            -inv + g_texRectTVtx[1].x/ w, inv - g_texRectTVtx[1].y/ h, -g_texRectTVtx[1].z,1,
+            -inv + g_texRectTVtx[2].x/ w, inv - g_texRectTVtx[2].y/ h, -g_texRectTVtx[2].z,1,
+
+            -inv + g_texRectTVtx[0].x/ w, inv - g_texRectTVtx[0].y/ h, -g_texRectTVtx[0].z,1,
+            -inv + g_texRectTVtx[2].x/ w, inv - g_texRectTVtx[2].y/ h, -g_texRectTVtx[2].z,1,
+            -inv + g_texRectTVtx[3].x/ w, inv - g_texRectTVtx[3].y/ h, -g_texRectTVtx[3].z,1
+    };
 
 
-	glVertexAttribPointer(VS_COLOR, 4, GL_FLOAT,GL_FALSE, 0, &colour );
-	glVertexAttribPointer(VS_POSITION,4,GL_FLOAT,GL_FALSE,0,&vertices);
-	glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, 0, &tex);
-	//OPENGL_CHECK_ERRORS;
-	glDrawArrays(GL_TRIANGLES,0,6);
-	//OPENGL_CHECK_ERRORS;
+    glVertexAttribPointer(VS_COLOR, 4, GL_FLOAT,GL_FALSE, 0, &colour );
+    glVertexAttribPointer(VS_POSITION,4,GL_FLOAT,GL_FALSE,0,&vertices);
+    glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, 0, &tex);
+    glVertexAttribPointer(VS_TEXCOORD1,2,GL_FLOAT,GL_FALSE, 0, &tex2);
+    //OPENGL_CHECK_ERRORS;
+    glDrawArrays(GL_TRIANGLES,0,6);
+    //OPENGL_CHECK_ERRORS;
 
-
-	//Restore old pointers
+    //Restore old pointers
     glVertexAttribPointer(VS_COLOR, 4, GL_UNSIGNED_BYTE,GL_TRUE, sizeof(uint8)*4, &(g_oglVtxColors[0][0]) );
     glVertexAttribPointer(VS_POSITION,4,GL_FLOAT,GL_FALSE,sizeof(float)*5,&(g_vtxProjected5[0][0]));
-	glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, sizeof( TLITVERTEX ), &(g_vtxBuffer[0].tcord[0].u));
+    glVertexAttribPointer(VS_TEXCOORD0,2,GL_FLOAT,GL_FALSE, sizeof( TLITVERTEX ), &(g_vtxBuffer[0].tcord[0].u));
+    glVertexAttribPointer(VS_TEXCOORD1,2,GL_FLOAT,GL_FALSE, sizeof( TLITVERTEX ), &(g_vtxBuffer[0].tcord[1].u));
+
+#endif
 
     if( cullface ) glEnable(GL_CULL_FACE);
 }

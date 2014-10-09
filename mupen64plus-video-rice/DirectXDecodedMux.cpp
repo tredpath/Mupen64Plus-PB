@@ -15,17 +15,18 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
+
 #include "Combiner.h"
+#include "DirectXDecodedMux.h"
+
 #ifdef min
 #undef min
 #endif
 #ifdef max
 #undef max
 #endif
-#include "DirectXDecodedMux.h"
+
 #include <algorithm>
-
-
 
 //This function is called after Reformat to handel two texels in 1 cycle, D3D can not handle
 //two texels in a single stage, the texels must be splited into multiple stages
@@ -149,7 +150,6 @@ void CDirectXDecodedMux::ReformatAgainWithTwoTexels(void)
                         }
                     }
                 }
-
             }
 
             if( CountTexel1Cycle(m2) < 2 )
@@ -157,8 +157,6 @@ void CDirectXDecodedMux::ReformatAgainWithTwoTexels(void)
                 continue;   //2nd cycle does not have two texels
             }
         }
-
-
     }
 }
 

@@ -17,12 +17,12 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#include <stdlib.h>
+
 #include <vector>
 
 #include <stdarg.h>
 
-#include "OGLPlatform.h"
+#include "osal_opengl.h"
 
 #define M64P_PLUGIN_PROTOTYPES 1
 #include "m64p_types.h"
@@ -67,7 +67,7 @@ RECT frameWriteByCPURectArray[20][20];
 bool frameWriteByCPURectFlag[20][20];
 std::vector<uint32> frameWriteRecord;
 
-void (*renderCallback)() = NULL;
+void (*renderCallback)(int) = NULL;
 
 /* definitions of pointers to Core config functions */
 ptr_ConfigOpenSection      ConfigOpenSection = NULL;
@@ -95,9 +95,10 @@ ptr_VidExt_ListFullscreenModes   CoreVideo_ListFullscreenModes = NULL;
 ptr_VidExt_SetVideoMode          CoreVideo_SetVideoMode = NULL;
 ptr_VidExt_SetCaption            CoreVideo_SetCaption = NULL;
 ptr_VidExt_ToggleFullScreen      CoreVideo_ToggleFullScreen = NULL;
+ptr_VidExt_ResizeWindow          CoreVideo_ResizeWindow = NULL;
 ptr_VidExt_GL_GetProcAddress     CoreVideo_GL_GetProcAddress = NULL;
 ptr_VidExt_GL_SetAttribute       CoreVideo_GL_SetAttribute = NULL;
-//ptr_VidExt_GL_GetAttribute       CoreVideo_GL_GetAttribute = NULL;
+ptr_VidExt_GL_GetAttribute       CoreVideo_GL_GetAttribute = NULL;
 ptr_VidExt_GL_SwapBuffers        CoreVideo_GL_SwapBuffers = NULL;
 
 //---------------------------------------------------------------------------------------
@@ -125,6 +126,35 @@ static void ChangeWindowStep2()
     status.ToToggleFullScreen = FALSE;
 }
 
+static void ResizeStep2(void)
+{
+    g_CritialSection.Lock();
+
+    // Delete all OpenGL textures
+    gTextureManager.CleanUp();
+    RDP_Cleanup();
+    // delete our opengl renderer
+    CDeviceBuilder::GetBuilder()->DeleteRender();
+
+    // call video extension function with updated width, height (this creates a new OpenGL context)
+    windowSetting.uDisplayWidth = status.gNewResizeWidth;
+    windowSetting.uDisplayHeight = status.gNewResizeHeight;
+    CoreVideo_ResizeWindow(windowSetting.uDisplayWidth, windowSetting.uDisplayHeight);
+
+    // re-initialize our OpenGL graphics context state
+    bool res = CGraphicsContext::Get()->ResizeInitialize(windowSetting.uDisplayWidth, windowSetting.uDisplayHeight, !windowSetting.bDisplayFullscreen);
+    if (res)
+    {
+        // re-create the OpenGL renderer
+        CDeviceBuilder::GetBuilder()->CreateRender();
+        CRender::GetRender()->Initialize();
+        DLParser_Init();
+    }
+
+    g_CritialSection.Unlock();
+    status.ToResize = false;
+}
+
 static void UpdateScreenStep2 (void)
 {
     status.bVIOriginIsUpdated = false;
@@ -132,6 +162,11 @@ static void UpdateScreenStep2 (void)
     if( status.ToToggleFullScreen && status.gDlistCount > 0 )
     {
         ChangeWindowStep2();
+        return;
+    }
+    if (status.ToResize && status.gDlistCount > 0)
+    {
+        ResizeStep2();
         return;
     }
 
@@ -256,7 +291,7 @@ static void ProcessDListStep2(void)
     }
 
     g_CritialSection.Unlock();
-}
+}   
 
 static bool StartVideo(void)
 {
@@ -302,7 +337,7 @@ static bool StartVideo(void)
         CDeviceBuilder::GetBuilder()->CreateGraphicsContext();
         CGraphicsContext::InitWindowInfo();
 
-        bool res = CGraphicsContext::Get()->Initialize(1024, 768, !windowSetting.bDisplayFullscreen);
+        bool res = CGraphicsContext::Get()->Initialize(1024, 600, !windowSetting.bDisplayFullscreen);
         if (!res)
         {
             g_CritialSection.Unlock();
@@ -541,27 +576,27 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
     l_DebugCallContext = Context;
 
     /* attach and call the CoreGetAPIVersions function, check Config and Video Extension API versions for compatibility */
-//    ptr_CoreGetAPIVersions CoreAPIVersionFunc;
-//    CoreAPIVersionFunc = (ptr_CoreGetAPIVersions) osal_dynlib_getproc(CoreLibHandle, "CoreGetAPIVersions");
-//    if (CoreAPIVersionFunc == NULL)
-//    {
-//        DebugMessage(M64MSG_ERROR, "Core emulator broken; no CoreAPIVersionFunc() function found.");
-//        return M64ERR_INCOMPATIBLE;
-//    }
-//    int ConfigAPIVersion, DebugAPIVersion, VidextAPIVersion;
-//    (*CoreAPIVersionFunc)(&ConfigAPIVersion, &DebugAPIVersion, &VidextAPIVersion, NULL);
-//    if ((ConfigAPIVersion & 0xffff0000) != (CONFIG_API_VERSION & 0xffff0000))
-//    {
-//        DebugMessage(M64MSG_ERROR, "Emulator core Config API (v%i.%i.%i) incompatible with plugin (v%i.%i.%i)",
-//                VERSION_PRINTF_SPLIT(ConfigAPIVersion), VERSION_PRINTF_SPLIT(CONFIG_API_VERSION));
-//        return M64ERR_INCOMPATIBLE;
-//    }
-//    if ((VidextAPIVersion & 0xffff0000) != (VIDEXT_API_VERSION & 0xffff0000))
-//    {
-//        DebugMessage(M64MSG_ERROR, "Emulator core Video Extension API (v%i.%i.%i) incompatible with plugin (v%i.%i.%i)",
-//                VERSION_PRINTF_SPLIT(VidextAPIVersion), VERSION_PRINTF_SPLIT(VIDEXT_API_VERSION));
-//        return M64ERR_INCOMPATIBLE;
-//    }
+    ptr_CoreGetAPIVersions CoreAPIVersionFunc;
+    CoreAPIVersionFunc = (ptr_CoreGetAPIVersions) osal_dynlib_getproc(CoreLibHandle, "CoreGetAPIVersions");
+    if (CoreAPIVersionFunc == NULL)
+    {
+        DebugMessage(M64MSG_ERROR, "Core emulator broken; no CoreAPIVersionFunc() function found.");
+        return M64ERR_INCOMPATIBLE;
+    }
+    int ConfigAPIVersion, DebugAPIVersion, VidextAPIVersion;
+    (*CoreAPIVersionFunc)(&ConfigAPIVersion, &DebugAPIVersion, &VidextAPIVersion, NULL);
+    if ((ConfigAPIVersion & 0xffff0000) != (CONFIG_API_VERSION & 0xffff0000))
+    {
+        DebugMessage(M64MSG_ERROR, "Emulator core Config API (v%i.%i.%i) incompatible with plugin (v%i.%i.%i)",
+                VERSION_PRINTF_SPLIT(ConfigAPIVersion), VERSION_PRINTF_SPLIT(CONFIG_API_VERSION));
+        return M64ERR_INCOMPATIBLE;
+    }
+    if ((VidextAPIVersion & 0xffff0000) != (VIDEXT_API_VERSION & 0xffff0000))
+    {
+        DebugMessage(M64MSG_ERROR, "Emulator core Video Extension API (v%i.%i.%i) incompatible with plugin (v%i.%i.%i)",
+                VERSION_PRINTF_SPLIT(VidextAPIVersion), VERSION_PRINTF_SPLIT(VIDEXT_API_VERSION));
+        return M64ERR_INCOMPATIBLE;
+    }
 
     /* Get the core config function pointers from the library handle */
     ConfigOpenSection = (ptr_ConfigOpenSection) osal_dynlib_getproc(CoreLibHandle, "ConfigOpenSection");
@@ -597,14 +632,15 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle, void *Con
     CoreVideo_SetVideoMode = (ptr_VidExt_SetVideoMode) osal_dynlib_getproc(CoreLibHandle, "VidExt_SetVideoMode");
     CoreVideo_SetCaption = (ptr_VidExt_SetCaption) osal_dynlib_getproc(CoreLibHandle, "VidExt_SetCaption");
     CoreVideo_ToggleFullScreen = (ptr_VidExt_ToggleFullScreen) osal_dynlib_getproc(CoreLibHandle, "VidExt_ToggleFullScreen");
+    CoreVideo_ResizeWindow = (ptr_VidExt_ResizeWindow) osal_dynlib_getproc(CoreLibHandle, "VidExt_ResizeWindow");
     CoreVideo_GL_GetProcAddress = (ptr_VidExt_GL_GetProcAddress) osal_dynlib_getproc(CoreLibHandle, "VidExt_GL_GetProcAddress");
     CoreVideo_GL_SetAttribute = (ptr_VidExt_GL_SetAttribute) osal_dynlib_getproc(CoreLibHandle, "VidExt_GL_SetAttribute");
-    //CoreVideo_GL_GetAttribute = (ptr_VidExt_GL_GetAttribute) osal_dynlib_getproc(CoreLibHandle, "VidExt_GL_GetAttribute");
+    CoreVideo_GL_GetAttribute = (ptr_VidExt_GL_GetAttribute) osal_dynlib_getproc(CoreLibHandle, "VidExt_GL_GetAttribute");
     CoreVideo_GL_SwapBuffers = (ptr_VidExt_GL_SwapBuffers) osal_dynlib_getproc(CoreLibHandle, "VidExt_GL_SwapBuffers");
 
     if (!CoreVideo_Init || !CoreVideo_Quit || !CoreVideo_ListFullscreenModes || !CoreVideo_SetVideoMode ||
-        !CoreVideo_SetCaption || !CoreVideo_ToggleFullScreen || !CoreVideo_GL_GetProcAddress ||
-        !CoreVideo_GL_SetAttribute || /*!CoreVideo_GL_GetAttribute ||*/ !CoreVideo_GL_SwapBuffers)
+        !CoreVideo_ResizeWindow || !CoreVideo_SetCaption || !CoreVideo_ToggleFullScreen || !CoreVideo_GL_GetProcAddress ||
+        !CoreVideo_GL_SetAttribute || !CoreVideo_GL_GetAttribute || !CoreVideo_GL_SwapBuffers)
     {
         DebugMessage(M64MSG_ERROR, "Couldn't connect to Core video extension functions");
         return M64ERR_INCOMPATIBLE;
@@ -771,6 +807,7 @@ EXPORT int CALL InitiateGFX(GFX_INFO Gfx_Info)
     windowSetting.fViWidth = 320;
     windowSetting.fViHeight = 240;
     status.ToToggleFullScreen = FALSE;
+    status.ToResize = false;
     status.bDisableFPS=false;
 
     if (!InitConfiguration())
@@ -783,6 +820,14 @@ EXPORT int CALL InitiateGFX(GFX_INFO Gfx_Info)
     CGraphicsContext::InitDeviceParameters();
 
     return(TRUE);
+}
+
+EXPORT void CALL ResizeVideoOutput(int width, int height)
+{
+    // save the new window resolution.  actual resizing operation is asynchronous (it happens later)
+    status.gNewResizeWidth = width;
+    status.gNewResizeHeight = height;
+    status.ToResize = true;
 }
 
 //---------------------------------------------------------------------------------------
@@ -917,30 +962,32 @@ EXPORT void CALL ShowCFB(void)
 }
 
 //void ReadScreen2( void *dest, int *width, int *height, int bFront )
-EXPORT void CALL ReadScreen(void *dest, int *width, int *height, int bFront)
+EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int bFront)
 {
-//    if (width == NULL || height == NULL)
-//        return;
-//
-//    *width = windowSetting.uDisplayWidth;
-//    *height = windowSetting.uDisplayHeight;
-//
-//    if (dest == NULL)
-//        return;
-//
-//    GLint oldMode;
-//    glGetIntegerv( GL_READ_BUFFER, &oldMode );
-//    if (bFront)
-//        glReadBuffer( GL_FRONT );
-//    else
-//        glReadBuffer( GL_BACK );
-//    glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
-//                 GL_RGB, GL_UNSIGNED_BYTE, dest );
-//    glReadBuffer( oldMode );
+    if (width == NULL || height == NULL)
+        return;
+
+    *width = windowSetting.uDisplayWidth;
+    *height = windowSetting.uDisplayHeight;
+
+    if (dest == NULL)
+        return;
+
+#if SDL_VIDEO_OPENGL
+    GLint oldMode;
+    glGetIntegerv( GL_READ_BUFFER, &oldMode );
+    if (bFront)
+        glReadBuffer( GL_FRONT );
+    else
+        glReadBuffer( GL_BACK );
+    glReadPixels( 0, 0, windowSetting.uDisplayWidth, windowSetting.uDisplayHeight,
+                 GL_RGB, GL_UNSIGNED_BYTE, dest );
+    glReadBuffer( oldMode );
+#endif
 }
     
 
-EXPORT void CALL SetRenderingCallback(void (*callback)())
+EXPORT void CALL SetRenderingCallback(void (*callback)(int))
 {
     renderCallback = callback;
 }
