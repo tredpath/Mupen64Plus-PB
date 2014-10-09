@@ -31,6 +31,13 @@
 
 #define GL_GLEXT_PROTOTYPES
 #include <SDL_opengl.h>
+#if defined(__MACOSX__)
+#include <OpenGL/glu.h>
+#elif defined(__MACOS__)
+#include <glu.h>
+#else
+#include <GL/glu.h>
+#endif
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -50,19 +57,9 @@ namespace OGLFT
         R, G, B, A
     };
 
-    class Library 
-    {
-        public:
-            static FT_Library& instance ( void );
-
-        protected:
-            Library ( void );
-            ~Library( void );
-
-        private:
-            static Library library;
-            static FT_Library library_;
-    };
+    // global library functions
+    bool Init_FT(void);
+    bool Uninit_FT(void);
 
     struct Advance 
     {

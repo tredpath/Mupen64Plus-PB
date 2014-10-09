@@ -25,7 +25,9 @@
 
 #include <stdlib.h>
 
+#define M64P_CORE_PROTOTYPES 1
 #include "m64p_types.h"
+#include "m64p_common.h"
 #include "../main/version.h"
 
 EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *PluginVersion, int *APIVersion, const char **PluginNamePtr, int *Capabilities)
@@ -38,7 +40,7 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
         *PluginVersion = MUPEN_CORE_VERSION;
 
     if (APIVersion != NULL)
-        *APIVersion = MUPEN_API_VERSION;
+        *APIVersion = FRONTEND_API_VERSION;
     
     if (PluginNamePtr != NULL)
         *PluginNamePtr = MUPEN_CORE_NAME;
@@ -57,6 +59,24 @@ EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType, int *Plugi
 #endif
     }
                     
+    return M64ERR_SUCCESS;
+}
+
+EXPORT m64p_error CALL CoreGetAPIVersions(int *ConfigVersion, int *DebugVersion, int *VidextVersion, int *ExtraVersion)
+{
+    /* set version info */
+    if (ConfigVersion != NULL)
+        *ConfigVersion = CONFIG_API_VERSION;
+
+    if (DebugVersion != NULL)
+        *DebugVersion = DEBUG_API_VERSION;
+
+    if (VidextVersion != NULL)
+        *VidextVersion = VIDEXT_API_VERSION;
+
+    if (ExtraVersion != NULL)
+        *ExtraVersion = 0;
+
     return M64ERR_SUCCESS;
 }
 

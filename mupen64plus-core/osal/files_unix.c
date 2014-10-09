@@ -101,7 +101,7 @@ static int get_xdg_dir(char *destpath, const char *envvar, const char *subdir)
     strcat(destpath, subdir);
 
     /* try to create the resulting directory tree, or return successfully if it already exists */
-    if (osal_mkdirp(destpath, 0770) != 0)
+    if (osal_mkdirp(destpath, 0700) != 0)
     {
         DebugMessage(M64MSG_ERROR, "Couldn't create directory: %s", destpath);
         return 3;
@@ -139,45 +139,41 @@ static int search_dir_file(char *destpath, const char *path, const char *filenam
 
 int osal_mkdirp(const char *dirpath, int mode)
 {
+    char *mypath, *currpath;
     struct stat fileinfo;
-    int dirpathlen = strlen(dirpath);
-    char *currpath = strdup(dirpath);
 
-    /* first, break the path into pieces by replacing all of the slashes wil NULL chars */
-    while (strlen(currpath) > 1)
-    {
-        char *lastslash = strrchr(currpath, '/');
-        if (lastslash == NULL)
-            break;
-        *lastslash = 0;
-    }
-    
-    /* then re-assemble the path from left to right until we get to a directory that doesn't exist */
-    while (strlen(currpath) < dirpathlen)
-    {
-        if (strlen(currpath) > 0 && stat(currpath, &fileinfo) != 0)
-            break;
-        currpath[strlen(currpath)] = '/';
-    }
+    // Terminate quickly if the path already exists
+    if (stat(dirpath, &fileinfo) == 0 && S_ISDIR(fileinfo.st_mode))
+        return 0;
 
-    /* then walk up the path chain, creating directories along the way */
-    do
+    // Create partial paths
+    mypath = currpath = strdup(dirpath);
+    if (mypath == NULL)
+        return 1;
+
+    while ((currpath = strpbrk(currpath + 1, OSAL_DIR_SEPARATORS)) != NULL)
     {
-        if (stat(currpath, &fileinfo) != 0)
+        *currpath = '\0';
+        if (stat(mypath, &fileinfo) != 0)
         {
-            if (mkdir(currpath, mode) != 0)
-            {
-                free(currpath);
-                return 1;        /* mkdir failed */
-            }
+            if (mkdir(mypath, mode) != 0)
+                break;
         }
-        if (strlen(currpath) == dirpathlen)
-            break;
         else
-            currpath[strlen(currpath)] = '/';
-    } while (1);
-    
-    free(currpath);        
+        {
+            if (!S_ISDIR(fileinfo.st_mode))
+                break;
+        }
+        *currpath = OSAL_DIR_SEPARATORS[0];
+    }
+    free(mypath);
+    if (currpath != NULL)
+        return 1;
+
+    // Create full path
+    if (stat(dirpath, &fileinfo) != 0 && mkdir(dirpath, mode) != 0)
+        return 1;
+
     return 0;
 }
 
@@ -206,7 +202,9 @@ const char * osal_get_shared_filepath(const char *filename, const char *firstsea
     for (i = 0; i < datasearchdirs; i++)
     {
         if (search_dir_file(retpath, datasearchpath[i], filename) == 0)
+		{
             return retpath;
+		}
     }
 
     /* we couldn't find the file */
@@ -239,8 +237,10 @@ const char * osal_get_user_datapath(void)
     static char retpath[PATH_MAX];
     int rval;
     
+#ifdef __QNXNTO__
     strcpy(retpath,"shared/misc/n64/");
-    return retpath;
+	return retpath;
+#endif
 
     /* first, try the XDG_DATA_HOME environment variable */
     rval = get_xdg_dir(retpath, "XDG_DATA_HOME", "mupen64plus/");

@@ -32,27 +32,69 @@
 #include "r4300/r4300.h"
 #include "r4300/ops.h"
 #include "main/rom.h"
+ 
+/* Following are the breakpoint functions for memory access calls.  See debugger/memory.h
+ * These macros generate the memory breakpoint function calls.*/
+MEMBREAKALL_local(nothing);
+MEMBREAKALL_local(nomem);
+MEMBREAKALL(rdram);
+MEMBREAKALL(rdramFB);
+MEMBREAKALL_local(rdramreg);
+MEMBREAKALL_local(rsp_mem);
+MEMBREAKALL_local(rsp_reg);
+MEMBREAKALL_local(rsp);
+MEMBREAKALL_local(dp);
+MEMBREAKALL_local(dps);
+MEMBREAKALL_local(mi);
+MEMBREAKALL_local(vi);
+MEMBREAKALL_local(ai);
+MEMBREAKALL_local(pi);
+MEMBREAKALL_local(ri);
+MEMBREAKALL_local(si);
+MEMBREAKALL_local(pif);
+
+static MEMBREAKREAD(read_flashram_status, 4);
+static MEMBREAKREAD(read_flashram_statusb, 1);
+static MEMBREAKREAD(read_flashram_statush, 2);
+static MEMBREAKREAD(read_flashram_statusd, 8);
+static MEMBREAKWRITE(write_flashram_dummy, 4);
+static MEMBREAKWRITE(write_flashram_dummyb, 1);
+static MEMBREAKWRITE(write_flashram_dummyh, 2);
+static MEMBREAKWRITE(write_flashram_dummyd, 8);
+static MEMBREAKWRITE(write_flashram_command, 4);
+static MEMBREAKWRITE(write_flashram_commandb, 1);
+static MEMBREAKWRITE(write_flashram_commandh, 2);
+static MEMBREAKWRITE(write_flashram_commandd, 8);
+
+static MEMBREAKREAD(read_rom, 4);
+static MEMBREAKREAD(read_romb, 1);
+static MEMBREAKREAD(read_romh, 2);
+static MEMBREAKREAD(read_romd, 8);
+
+static MEMBREAKWRITE(write_rom, 8);
 
 #if !defined(NO_ASM) && (defined(__i386__) || defined(__x86_64__))
 
+/* we must define PACKAGE so that bfd.h (which is included from dis-asm.h) doesn't throw an error */
+#define PACKAGE "mupen64plus-core"
 #include <dis-asm.h>
 #include <stdarg.h>
 
-int  lines_recompiled;
-uint32 addr_recompiled;
-int  num_decoded;
+static int  lines_recompiled;
+static uint32 addr_recompiled;
+static int  num_decoded;
 
-char opcode_recompiled[564][MAX_DISASSEMBLY];
-char args_recompiled[564][MAX_DISASSEMBLY*4];
-void *opaddr_recompiled[564];
+static char opcode_recompiled[564][MAX_DISASSEMBLY];
+static char args_recompiled[564][MAX_DISASSEMBLY*4];
+static void *opaddr_recompiled[564];
 
-disassemble_info dis_info;
+static disassemble_info dis_info;
 
 #define CHECK_MEM(address) \
-   if (!invalid_code[(address) >> 12] && blocks[(address) >> 12]->block[((address) & 0xFFF) / 4].ops != NOTCOMPILED) \
+   if (!invalid_code[(address) >> 12] && blocks[(address) >> 12]->block[((address) & 0xFFF) / 4].ops != current_instruction_table.NOTCOMPILED) \
      invalid_code[(address) >> 12] = 1;
 
-void process_opcode_out(void *strm, const char *fmt, ...){
+static void process_opcode_out(void *strm, const char *fmt, ...){
   va_list ap;
   va_start(ap, fmt);
   char *arg;
@@ -81,7 +123,7 @@ void process_opcode_out(void *strm, const char *fmt, ...){
 
 // Callback function that will be called by libopcodes to read the 
 // bytes to disassemble ('read_memory_func' member of 'disassemble_info').
-int read_memory_func(bfd_vma memaddr, bfd_byte *myaddr, 
+static int read_memory_func(bfd_vma memaddr, bfd_byte *myaddr, 
                             unsigned int length, disassemble_info *info) {
   char* from = (char*)(long)(memaddr);
   char* to =   (char*)myaddr;
@@ -105,7 +147,7 @@ void init_host_disassembler(void){
   dis_info.read_memory_func = read_memory_func;
 }
 
-void decode_recompiled(uint32 addr)
+static void decode_recompiled(uint32 addr)
 {
     unsigned char *assemb, *end_addr;
 
@@ -114,7 +156,7 @@ void decode_recompiled(uint32 addr)
     if(blocks[addr>>12] == NULL)
         return;
 
-    if(blocks[addr>>12]->block[(addr&0xFFF)/4].ops == NOTCOMPILED)
+    if(blocks[addr>>12]->block[(addr&0xFFF)/4].ops == current_instruction_table.NOTCOMPILED)
     //      recompile_block((int *) SP_DMEM, blocks[addr>>12], addr);
       {
     strcpy(opcode_recompiled[0],"INVLD");
@@ -215,11 +257,6 @@ int get_has_recompiled(uint32 addr)
 
 #define CHECK_MEM(address)
 
-char* get_recompiled(uint32 addr, int index)
-{
-    return NULL;
-}
-
 int get_num_recompiled(uint32 addr)
 {
     return 0;
@@ -252,13 +289,6 @@ void init_host_disassembler(void)
 
 #endif
 
-
-void update_memory(void){
-  int i;
-  for(i=0; i<0x10000; i++)
-    get_memory_flags(i*0x10000);
-}
-
 uint64 read_memory_64(uint32 addr)
 {
     return ((uint64)read_memory_32(addr) << 32) | (uint64)read_memory_32(addr + 4);
@@ -286,40 +316,91 @@ void write_memory_64_unaligned(uint32 addr, uint64 value)
 }
 
 uint32 read_memory_32(uint32 addr){
+  const uint32 addrlow = (addr & 0xFFFF);
+
   switch(get_memory_type(addr))
     {
-    case MEM_NOMEM:
+    case M64P_MEM_NOMEM:
       if(tlb_LUT_r[addr>>12])
-    return read_memory_32((tlb_LUT_r[addr>>12]&0xFFFFF000)|(addr&0xFFF));
-      return MEM_INVALID;
-    case MEM_RDRAM:
+        return read_memory_32((tlb_LUT_r[addr>>12]&0xFFFFF000)|(addr&0xFFF));
+      return M64P_MEM_INVALID;
+    case M64P_MEM_RDRAM:
       return *((uint32 *)(rdramb + (addr & 0xFFFFFF)));
-    case MEM_RSPMEM:
+    case M64P_MEM_RSPMEM:
       if ((addr & 0xFFFF) < 0x1000)
-    return *((uint32 *)(SP_DMEMb + (addr&0xFFF)));
+        return *((uint32 *)(SP_DMEMb + (addr&0xFFF)));
       else if ((addr&0xFFFF) < 0x2000)
-    return *((uint32 *)(SP_IMEMb + (addr&0xFFF)));
+        return *((uint32 *)(SP_IMEMb + (addr&0xFFF)));
       else
-    return MEM_INVALID;
-    case MEM_ROM:
+        return M64P_MEM_INVALID;
+    case M64P_MEM_ROM:
       return *((uint32 *)(rom + (addr & 0x03FFFFFF)));
+    case M64P_MEM_RDRAMREG:
+      if (addrlow < 0x28)
+        return *(readrdramreg[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_RSPREG:
+      if (addrlow < 0x20)
+        return *(readrspreg[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_RSP:
+      if (addrlow < 0x8)
+        return *(readrsp[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_DP:
+      if (addrlow < 0x20)
+        return *(readdp[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_DPS:
+      if (addrlow < 0x10)
+        return *(readdps[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_VI:
+      if (addrlow < 0x38)
+        return *(readvi[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_AI:
+      if (addrlow < 0x18)
+        return *(readai[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_PI:
+      if (addrlow < 0x34)
+        return *(readpi[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_RI:
+      if (addrlow < 0x20)
+        return *(readri[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_SI:
+      if (addrlow < 0x1c)
+        return *(readsi[addrlow&0xfffc]);
+      break;
+    case M64P_MEM_PIF:
+      if (addrlow >= 0x7C0 && addrlow <= 0x7FF)
+        return sl(*((unsigned int *)(PIF_RAMb + (addrlow & 0x7FF) - 0x7C0)));
+      break;
+    case M64P_MEM_MI:
+      if (addrlow < 0x10)
+        return *(readmi[addrlow&0xfffc]);
+      break;
     default:
-      return MEM_INVALID;
+      break;
     }
+    return M64P_MEM_INVALID;
 }
 
 uint32 read_memory_32_unaligned(uint32 addr)
 {
     uint8 i, b[4];
     
-    for(i=0; i<4; i++) b[i] = read_memory_32(addr + i);
-    return (b[3] << 24) | (b[2] << 16) | (b[1] << 8) | b[0];
+    for(i=0; i<4; i++) b[i] = read_memory_8(addr + i);
+    return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
 }
 
 void write_memory_32(uint32 addr, uint32 value){
   switch(get_memory_type(addr))
     {
-    case MEM_RDRAM:
+    case M64P_MEM_RDRAM:
       *((uint32 *)(rdramb + (addr & 0xFFFFFF))) = value;
       CHECK_MEM(addr)
       break;
@@ -328,13 +409,11 @@ void write_memory_32(uint32 addr, uint32 value){
 
 void write_memory_32_unaligned(uint32 addr, uint32 value)
 {
-    write_memory_8(addr + 3, value >> 24);
-    write_memory_8(addr + 2, (value >> 16) & 0xFF);
-    write_memory_8(addr + 1, (value >> 8) & 0xFF);
-    write_memory_8(addr + 0, value & 0xFF);
+    write_memory_8(addr + 0, value >> 24);
+    write_memory_8(addr + 1, (value >> 16) & 0xFF);
+    write_memory_8(addr + 2, (value >> 8) & 0xFF);
+    write_memory_8(addr + 3, value & 0xFF);
 }
-
-
 
 //read_memory_16_unaligned and write_memory_16_unaligned don't exist because
 //read_memory_16 and write_memory_16 work unaligned already.
@@ -367,30 +446,86 @@ void write_memory_8(uint32 addr, uint8 value)
     write_memory_32(addr & ~3, word);
 }
 
-uint32 get_memory_flags(uint32 addr){
+uint32 get_memory_flags(uint32 addr)
+{
   int type=get_memory_type(addr);
+  const uint32 addrlow = (addr & 0xFFFF);
   uint32 flags = 0;
 
   switch(type)
-    {
-    case MEM_NOMEM:
+  {
+    case M64P_MEM_NOMEM:
       if(tlb_LUT_r[addr>>12])
-    flags|=MEM_FLAG_READABLE;
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
       break;
-    case MEM_RSPMEM:
-      if((addr & 0xFFFF) < 0x2000)
-    flags|=MEM_FLAG_READABLE;
+    case M64P_MEM_NOTHING:
+      if (((addr >> 16) == 0x8801 || (addr >> 16 == 0xA801)) && addrlow == 0)
+        flags = M64P_MEM_FLAG_WRITABLE_EMUONLY; // for flashram command
       break;
-    case MEM_RDRAM:
-    case MEM_ROM:
-      flags|=MEM_FLAG_READABLE;
-    }
-
-  switch(type)
-    {
-    case MEM_RDRAM:
-      flags|=MEM_FLAG_WRITABLE;
-    }
+    case M64P_MEM_RDRAM:
+      flags = M64P_MEM_FLAG_WRITABLE;
+    case M64P_MEM_ROM:
+      flags |= M64P_MEM_FLAG_READABLE;
+      break;
+    case M64P_MEM_RDRAMREG:
+      if (addrlow < 0x28)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_RSPMEM:
+      if (addrlow < 0x2000)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_RSPREG:
+      if (addrlow < 0x20)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_RSP:
+      if (addrlow < 0x8)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_DP:
+      if (addrlow < 0x20)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_DPS:
+      if (addrlow < 0x10)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_VI:
+      if (addrlow < 0x38)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_AI:
+      if (addrlow < 0x18)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_PI:
+      if (addrlow < 0x34)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_RI:
+      if (addrlow < 0x20)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_SI:
+      if (addrlow < 0x1c)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_FLASHRAMSTAT:
+      if (addrlow == 0)
+        flags = M64P_MEM_FLAG_READABLE_EMUONLY;
+      break;
+    case M64P_MEM_PIF:
+      if (addrlow >= 0x7C0 && addrlow <= 0x7FF)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    case M64P_MEM_MI:
+      if (addrlow < 0x10)
+        flags = M64P_MEM_FLAG_READABLE | M64P_MEM_FLAG_WRITABLE_EMUONLY;
+      break;
+    default:
+      break;
+  }
 
   return flags;
 }
@@ -399,45 +534,45 @@ int get_memory_type(uint32 addr){
   void (*readfunc)() = readmem[addr >> 16];
 
   if((readfunc == read_nomem) || (readfunc == read_nomem_break))
-    return MEM_NOMEM;
+    return M64P_MEM_NOMEM;
   else if((readfunc == read_nothing) || (readfunc == read_nothing_break))
-    return MEM_NOTHING;
+    return M64P_MEM_NOTHING;
   else if((readfunc == read_rdram) || (readfunc == read_rdram_break))
-    return MEM_RDRAM;
+    return M64P_MEM_RDRAM;
   else if((readfunc == read_rdramreg) || (readfunc == read_rdramreg_break))
-    return MEM_RDRAMREG;
+    return M64P_MEM_RDRAMREG;
   else if((readfunc == read_rsp_mem) || (readfunc == read_rsp_mem_break))
-    return MEM_RSPMEM;
+    return M64P_MEM_RSPMEM;
   else if((readfunc == read_rsp_reg) || (readfunc == read_rsp_reg_break))
-    return MEM_RSPREG;
+    return M64P_MEM_RSPREG;
   else if((readfunc == read_rsp) || (readfunc == read_rsp_break))
-    return MEM_RSP;
+    return M64P_MEM_RSP;
   else if((readfunc == read_dp) || (readfunc == read_dp_break))
-    return MEM_DP;
+    return M64P_MEM_DP;
   else if((readfunc == read_dps) || (readfunc == read_dps_break))
-    return MEM_DPS;
+    return M64P_MEM_DPS;
   else if((readfunc == read_vi) || (readfunc == read_vi_break))
-    return MEM_VI;
+    return M64P_MEM_VI;
   else if((readfunc == read_ai) || (readfunc == read_ai_break))
-    return MEM_AI;
+    return M64P_MEM_AI;
   else if((readfunc == read_pi) || (readfunc == read_pi_break))
-    return MEM_PI;
+    return M64P_MEM_PI;
   else if((readfunc == read_ri) || (readfunc == read_ri_break))
-    return MEM_RI;
+    return M64P_MEM_RI;
   else if((readfunc == read_si) || (readfunc == read_si_break))
-    return MEM_SI;
+    return M64P_MEM_SI;
   else if((readfunc == read_flashram_status) ||
           (readfunc == read_flashram_status_break))
-    return MEM_FLASHRAMSTAT;
+    return M64P_MEM_FLASHRAMSTAT;
   else if((readfunc == read_rom) || (readfunc == read_rom_break))
-    return MEM_ROM;
+    return M64P_MEM_ROM;
   else if((readfunc == read_pif) || (readfunc == read_pif_break))
-    return MEM_PIF;
+    return M64P_MEM_PIF;
   else if((readfunc == read_mi) || (readfunc == read_mi_break))
-    return MEM_MI;
+    return M64P_MEM_MI;
   else
-    DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger get_memory_type(): %x", readfunc);
-  return MEM_NOMEM;
+    DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger get_memory_type(): %p", readfunc);
+  return M64P_MEM_NOMEM;
 }
 
 void activate_memory_break_read(uint32 addr) {
@@ -558,7 +693,7 @@ void activate_memory_break_read(uint32 addr) {
         readmemd[addr >> 16] = read_romd_break;
    }
    else
-        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger activate_memory_break_read(): %x", readfunc);
+        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger activate_memory_break_read(): %p", readfunc);
 }
 
 void deactivate_memory_break_read(uint32 addr) {
@@ -679,7 +814,7 @@ void deactivate_memory_break_read(uint32 addr) {
         readmemd[addr >> 16] = read_romd;
     }
     else
-        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger deactivate_memory_break_read(): %x", readfunc);
+        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger deactivate_memory_break_read(): %p", readfunc);
 }
 
 void activate_memory_break_write(uint32 addr) {
@@ -806,7 +941,7 @@ void activate_memory_break_write(uint32 addr) {
         writememd[addr >> 16] = write_nothingd_break;
    }
    else
-        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger activate_memory_break_write(): %x", writefunc);
+        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger activate_memory_break_write(): %p", writefunc);
 }
 
 void deactivate_memory_break_write(uint32 addr) {
@@ -933,45 +1068,5 @@ void deactivate_memory_break_write(uint32 addr) {
         writememd[addr >> 16] = write_nothingd;
     }
     else
-        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger deactivate_memory_break_write(): %x", writefunc);
+        DebugMessage(M64MSG_ERROR, "Unknown memory type in debugger deactivate_memory_break_write(): %p", writefunc);
 }
-
-/* Following are the breakpoint functions for memory access calls.  See debugger/memory.h
- * These macros generate the memory breakpoint function calls.*/
-MEMBREAKALL(nothing);
-MEMBREAKALL(nomem);
-MEMBREAKALL(rdram);
-MEMBREAKALL(rdramFB);
-MEMBREAKALL(rdramreg);
-MEMBREAKALL(rsp_mem);
-MEMBREAKALL(rsp_reg);
-MEMBREAKALL(rsp);
-MEMBREAKALL(dp);
-MEMBREAKALL(dps);
-MEMBREAKALL(mi);
-MEMBREAKALL(vi);
-MEMBREAKALL(ai);
-MEMBREAKALL(pi);
-MEMBREAKALL(ri);
-MEMBREAKALL(si);
-MEMBREAKALL(pif);
-
-MEMBREAKREAD(read_flashram_status, 4);
-MEMBREAKREAD(read_flashram_statusb, 1);
-MEMBREAKREAD(read_flashram_statush, 2);
-MEMBREAKREAD(read_flashram_statusd, 8);
-MEMBREAKWRITE(write_flashram_dummy, 4);
-MEMBREAKWRITE(write_flashram_dummyb, 1);
-MEMBREAKWRITE(write_flashram_dummyh, 2);
-MEMBREAKWRITE(write_flashram_dummyd, 8);
-MEMBREAKWRITE(write_flashram_command, 4);
-MEMBREAKWRITE(write_flashram_commandb, 1);
-MEMBREAKWRITE(write_flashram_commandh, 2);
-MEMBREAKWRITE(write_flashram_commandd, 8);
-
-MEMBREAKREAD(read_rom, 4);
-MEMBREAKREAD(read_romb, 1);
-MEMBREAKREAD(read_romh, 2);
-MEMBREAKREAD(read_romd, 8);
-
-MEMBREAKWRITE(write_rom, 8);

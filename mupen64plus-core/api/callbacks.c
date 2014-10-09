@@ -65,8 +65,6 @@ void DebugMessage(int level, const char *message, ...)
   (*pDebugFunc)(DebugContext, level, msgbuf);
 
   va_end(args);
-
-  fflush(stdout);
 }
 
 void StateChanged(m64p_core_param param_type, int new_value)

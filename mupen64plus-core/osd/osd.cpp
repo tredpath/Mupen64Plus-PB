@@ -21,16 +21,20 @@
 
 // On-screen Display
 #include <SDL_opengl.h>
+#include <SDL_thread.h>
 
 #include "OGLFT.h"
 #include "osd.h"
 
 extern "C" {
+    #define M64P_CORE_PROTOTYPES 1
+    #include "api/m64p_config.h"
     #include "api/config.h"
     #include "api/callbacks.h"
+    #include "api/m64p_vidext.h"
     #include "api/vidext.h"
     #include "main/main.h"
-    #include "main/util.h"
+    #include "main/list.h"
     #include "osal/files.h"
     #include "osal/preproc.h"
     #include "plugin/plugin.h"
@@ -44,14 +48,18 @@ static PTRGLACTIVETEXTURE pglActiveTexture = NULL;
 // static variables for OSD
 static int l_OsdInitialized = 0;
 
-static list_t l_messageQueue = NULL;
+static LIST_HEAD(l_messageQueue);
 static OGLFT::Monochrome *l_font;
 static float l_fLineHeight = -1.0;
 
 static void animation_none(osd_message_t *);
 static void animation_fade(osd_message_t *);
+static void osd_remove_message(osd_message_t *msg);
+static osd_message_t * osd_message_valid(osd_message_t *testmsg);
 
-static float fCornerScroll[OSD_NUM_CORNERS]; 
+static float fCornerScroll[OSD_NUM_CORNERS];
+
+static SDL_mutex *osd_list_lock;
 
 // animation handlers
 static void (*l_animations[OSD_NUM_ANIM_TYPES])(osd_message_t *) = {
@@ -211,6 +219,18 @@ void osd_init(int width, int height)
 {
     const char *fontpath;
 
+    osd_list_lock = SDL_CreateMutex();
+    if (!osd_list_lock) {
+        DebugMessage(M64MSG_ERROR, "Could not create osd list lock");
+        return;
+    }
+
+    if (!OGLFT::Init_FT())
+    {
+        DebugMessage(M64MSG_ERROR, "Could not initialize freetype library.");
+        return;
+    }
+
     fontpath = ConfigGetSharedDataFilepath(FONT_FILENAME);
 
     l_font = new OGLFT::Monochrome(fontpath, (float) height / 35.0f);  // make font size proportional to screen height
@@ -244,8 +264,7 @@ void osd_init(int width, int height)
 extern "C"
 void osd_exit(void)
 {
-    list_node_t *node;
-    osd_message_t *msg;
+    osd_message_t *msg, *safe;
 
     // delete font renderer
     if (l_font)
@@ -255,15 +274,18 @@ void osd_exit(void)
     }
 
     // delete message queue
-    list_foreach(l_messageQueue, node)
-    {
-        msg = (osd_message_t *)node->data;
-
-        if(msg->text)
-            free(msg->text);
-        free(msg);
+    SDL_LockMutex(osd_list_lock);
+    list_for_each_entry_safe(msg, safe, &l_messageQueue, osd_message_t, list) {
+        osd_remove_message(msg);
+        if (!msg->user_managed)
+            free(msg);
     }
-    list_delete(&l_messageQueue);
+    SDL_UnlockMutex(osd_list_lock);
+
+    // shut down the Freetype library
+    OGLFT::Uninit_FT();
+
+    SDL_DestroyMutex(osd_list_lock);
 
     // reset initialized flag
     l_OsdInitialized = 0;
@@ -273,12 +295,11 @@ void osd_exit(void)
 extern "C"
 void osd_render()
 {
-    list_node_t *node;
-    osd_message_t *msg, *msg_to_delete = NULL;
+    osd_message_t *msg, *safe;
     int i;
 
     // if we're not initialized or list is empty, then just skip it all
-    if (!l_OsdInitialized || l_messageQueue == NULL)
+    if (!l_OsdInitialized || list_empty(&l_messageQueue))
         return;
 
     // get the viewport dimensions
@@ -316,6 +337,7 @@ void osd_render()
     // setup for drawing text
     glDisable(GL_FOG);
     glDisable(GL_LIGHTING);
+    glDisable(GL_ALPHA_TEST);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_SCISSOR_TEST);
@@ -343,17 +365,8 @@ void osd_render()
     for (i = 0; i < OSD_NUM_CORNERS; i++)
         fCornerPos[i] = 0.5f * l_fLineHeight;
 
-    list_foreach(l_messageQueue, node)
-    {
-        msg = (osd_message_t *)node->data;
-
-        // if previous message was marked for deletion, delete it
-        if(msg_to_delete)
-        {
-            osd_delete_message(msg_to_delete);
-            msg_to_delete = NULL;
-        }
-
+    SDL_LockMutex(osd_list_lock);
+    list_for_each_entry_safe(msg, safe, &l_messageQueue, osd_message_t, list) {
         // update message state
         if(msg->timeout[msg->state] != OSD_INFINITE_TIMEOUT &&
            ++msg->frames >= msg->timeout[msg->state])
@@ -361,7 +374,13 @@ void osd_render()
             // if message is in last state, mark it for deletion and continue to the next message
             if(msg->state >= OSD_NUM_STATES - 1)
             {
-                msg_to_delete = msg;
+                if (msg->user_managed) {
+                    osd_remove_message(msg);
+                } else {
+                    osd_remove_message(msg);
+                    free(msg);
+                }
+
                 continue;
             }
 
@@ -383,6 +402,7 @@ void osd_render()
         msg->yoffset -= get_message_offset(msg, fStartOffset);
         fCornerPos[msg->corner] += l_fLineHeight;
     }
+    SDL_UnlockMutex(osd_list_lock);
 
     // do the scrolling
     for (int i = 0; i < OSD_NUM_CORNERS; i++)
@@ -391,10 +411,6 @@ void osd_render()
         if (fCornerScroll[i] >= 0.0)
             fCornerScroll[i] = 0.0;
     }
-
-    // if last message was marked for deletion, delete it
-    if(msg_to_delete)
-        osd_delete_message(msg_to_delete);
 
     // restore the matrices
     glMatrixMode(GL_MODELVIEW);
@@ -436,7 +452,7 @@ osd_message_t * osd_new_message(enum osd_corner eCorner, const char *fmt, ...)
 
     if (!l_OsdInitialized) return NULL;
 
-    osd_message_t *msg = (osd_message_t *)malloc(sizeof(osd_message_t));
+    osd_message_t *msg = (osd_message_t *)malloc(sizeof(*msg));
 
     if (!msg) return NULL;
 
@@ -448,6 +464,7 @@ osd_message_t * osd_new_message(enum osd_corner eCorner, const char *fmt, ...)
     // set default values
     memset(msg, 0, sizeof(osd_message_t));
     msg->text = strdup(buf);
+    msg->user_managed = 0;
     // default to white
     msg->color[R] = 1.;
     msg->color[G] = 1.;
@@ -480,7 +497,9 @@ osd_message_t * osd_new_message(enum osd_corner eCorner, const char *fmt, ...)
     }
 
     // add to message queue
-    list_prepend(&l_messageQueue, msg);
+    SDL_LockMutex(osd_list_lock);
+    list_add(&msg->list, &l_messageQueue);
+    SDL_UnlockMutex(osd_list_lock);
 
     return msg;
 }
@@ -499,9 +518,7 @@ void osd_update_message(osd_message_t *msg, const char *fmt, ...)
     buf[1023] = 0;
     va_end(ap);
 
-    if(msg->text)
-        free(msg->text);
-
+    free(msg->text);
     msg->text = strdup(buf);
 
     // reset bounding box
@@ -517,31 +534,33 @@ void osd_update_message(osd_message_t *msg, const char *fmt, ...)
         msg->frames = 0;
     }
 
+    SDL_LockMutex(osd_list_lock);
+    if (!osd_message_valid(msg))
+        list_add(&msg->list, &l_messageQueue);
+    SDL_UnlockMutex(osd_list_lock);
+
 }
 
 // remove message from message queue
+static void osd_remove_message(osd_message_t *msg)
+{
+    if (!l_OsdInitialized || !msg) return;
+
+    free(msg->text);
+    msg->text = NULL;
+    list_del(&msg->list);
+}
+
+// remove message from message queue and free it
 extern "C"
 void osd_delete_message(osd_message_t *msg)
 {
-    list_node_t *node;
-
     if (!l_OsdInitialized || !msg) return;
 
-    if (msg->text)
-        free(msg->text);
-
-    node = list_find_node(l_messageQueue, msg);
+    SDL_LockMutex(osd_list_lock);
+    osd_remove_message(msg);
     free(msg);
-    list_node_delete(&l_messageQueue, node);
-}
-
-// set "corner" of the screen that message appears in.
-extern "C"
-void osd_message_set_corner(osd_message_t *msg, enum osd_corner corner)
-{
-    if (!l_OsdInitialized || !msg) return;
-
-    msg->corner = corner;
+    SDL_UnlockMutex(osd_list_lock);
 }
 
 // set message so it doesn't automatically expire in a certain number of frames.
@@ -555,15 +574,27 @@ void osd_message_set_static(osd_message_t *msg)
     msg->frames = 0;
 }
 
-// return message pointer if valid (in the OSD list), otherwise return NULL
+// set message so it doesn't automatically get freed when finished transition.
 extern "C"
-osd_message_t * osd_message_valid(osd_message_t *testmsg)
+void osd_message_set_user_managed(osd_message_t *msg)
 {
+    if (!l_OsdInitialized || !msg) return;
+
+    msg->user_managed = 1;
+}
+
+// return message pointer if valid (in the OSD list), otherwise return NULL
+static osd_message_t * osd_message_valid(osd_message_t *testmsg)
+{
+    osd_message_t *msg;
+
     if (!l_OsdInitialized || !testmsg) return NULL;
 
-    if (list_find_node(l_messageQueue, testmsg) == NULL)
-        return NULL;
-    else
-        return testmsg;
+    list_for_each_entry(msg, &l_messageQueue, osd_message_t, list) {
+        if (msg == testmsg)
+            return testmsg;
+    }
+
+    return NULL;
 }
 

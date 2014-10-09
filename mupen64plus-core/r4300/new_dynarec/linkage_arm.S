@@ -27,50 +27,78 @@
 	.eabi_attribute 26, 2
 	.eabi_attribute 30, 6
 	.eabi_attribute 18, 4
-	.file	"linkage_arm.s"
-#	.global	rdram
-#rdram = 0x80000000
-	.global code_cache
+	.file	"linkage_arm.S"
+	.global extra_memory
+	.hidden extra_memory
 	.global	dynarec_local
+	.hidden dynarec_local
 	.global	reg
+	.hidden reg
 	.global	hi
+	.hidden hi
 	.global	lo
+	.hidden lo
 	.global	reg_cop1_simple
+	.hidden reg_cop1_simple
 	.global	reg_cop1_double
+	.hidden reg_cop1_double
 	.global reg_cop0
+	.hidden reg_cop0
 	.global	FCR0
+	.hidden FCR0
 	.global	FCR31
+	.hidden FCR31
 	.global	rounding_modes
+	.hidden rounding_modes
 	.global	next_interupt
+	.hidden next_interupt
 	.global	cycle_count
+	.hidden cycle_count
 	.global	last_count
+	.hidden last_count
 	.global	pending_exception
+	.hidden pending_exception
 	.global	pcaddr
+	.hidden pcaddr
 	.global	stop
+	.hidden stop
 	.global	invc_ptr
+	.hidden invc_ptr
 	.global	address
+	.hidden address
 	.global	readmem_dword
+	.hidden readmem_dword
 	.global	dword
+	.hidden dword
 	.global	word
+	.hidden word
 	.global	hword
+	.hidden hword
 	.global	cpu_byte
+	.hidden cpu_byte
 	.global	branch_target
+	.hidden branch_target
 	.global	PC
+	.hidden PC
 	.global	fake_pc
+	.hidden fake_pc
 	.global	mini_ht
+	.hidden mini_ht
 	.global	restore_candidate
+	.hidden restore_candidate
 	.global	ram_offset
+	.hidden ram_offset
 	.global	memory_map
+	.hidden memory_map
 	.bss
-	.align 12
-code_cache:
-	.space  1<<25
-
-	.align	4
+	.align	12
+	.type	extra_memory, %object
+	.size	extra_memory, 33554432
+extra_memory:
+	.space	33554432+64+16+16+8+8+8+8+256+8+8+128+128+128+16+8+132+4+256+512+4194304
+dynarec_local = extra_memory + 33554432
 	.type	dynarec_local, %object
 	.size	dynarec_local, 64
-dynarec_local:
-	.space	64+16+16+8+8+8+8+256+8+8+128+128+128+16+8+132+4+256+512+4194304
 next_interupt = dynarec_local + 64
 	.type	next_interupt, %object
 	.size	next_interupt, 4
@@ -162,6 +190,7 @@ memory_map = restore_candidate + 512
 	.text
 	.align	2
 	.global	dyna_linker
+	.hidden dyna_linker
 	.type	dyna_linker, %function
 dyna_linker:
 	/* r0 = virtual target address */
@@ -257,7 +286,6 @@ dyna_linker:
 	mov	r1, r0
 	mov	r2, #8
 	.size	dyna_linker, .-dyna_linker
-	.global	exec_pagefault
 	.type	exec_pagefault, %function
 exec_pagefault:
 	/* r0 = instruction pointer */
@@ -285,6 +313,7 @@ exec_pagefault:
 /* Special dynamic linker for the case where a page fault
    may occur in a branch delay slot */
 	.global	dyna_linker_ds
+	.hidden dyna_linker_ds
 	.type	dyna_linker_ds, %function
 dyna_linker_ds:
 	/* r0 = virtual target address */
@@ -394,12 +423,14 @@ dyna_linker_ds:
 	.word	hash_table
 	.align	2
 	.global	jump_vaddr_r0
+	.hidden jump_vaddr_r0
 	.type	jump_vaddr_r0, %function
 jump_vaddr_r0:
 	eor	r2, r0, r0, lsl #16
 	b	jump_vaddr
 	.size	jump_vaddr_r0, .-jump_vaddr_r0
 	.global	jump_vaddr_r1
+	.hidden jump_vaddr_r1
 	.type	jump_vaddr_r1, %function
 jump_vaddr_r1:
 	eor	r2, r1, r1, lsl #16
@@ -407,6 +438,7 @@ jump_vaddr_r1:
 	b	jump_vaddr
 	.size	jump_vaddr_r1, .-jump_vaddr_r1
 	.global	jump_vaddr_r2
+	.hidden jump_vaddr_r2
 	.type	jump_vaddr_r2, %function
 jump_vaddr_r2:
 	mov	r0, r2
@@ -414,6 +446,7 @@ jump_vaddr_r2:
 	b	jump_vaddr
 	.size	jump_vaddr_r2, .-jump_vaddr_r2
 	.global	jump_vaddr_r3
+	.hidden jump_vaddr_r3
 	.type	jump_vaddr_r3, %function
 jump_vaddr_r3:
 	eor	r2, r3, r3, lsl #16
@@ -421,6 +454,7 @@ jump_vaddr_r3:
 	b	jump_vaddr
 	.size	jump_vaddr_r3, .-jump_vaddr_r3
 	.global	jump_vaddr_r4
+	.hidden jump_vaddr_r4
 	.type	jump_vaddr_r4, %function
 jump_vaddr_r4:
 	eor	r2, r4, r4, lsl #16
@@ -428,6 +462,7 @@ jump_vaddr_r4:
 	b	jump_vaddr
 	.size	jump_vaddr_r4, .-jump_vaddr_r4
 	.global	jump_vaddr_r5
+	.hidden jump_vaddr_r5
 	.type	jump_vaddr_r5, %function
 jump_vaddr_r5:
 	eor	r2, r5, r5, lsl #16
@@ -435,6 +470,7 @@ jump_vaddr_r5:
 	b	jump_vaddr
 	.size	jump_vaddr_r5, .-jump_vaddr_r5
 	.global	jump_vaddr_r6
+	.hidden jump_vaddr_r6
 	.type	jump_vaddr_r6, %function
 jump_vaddr_r6:
 	eor	r2, r6, r6, lsl #16
@@ -442,6 +478,7 @@ jump_vaddr_r6:
 	b	jump_vaddr
 	.size	jump_vaddr_r6, .-jump_vaddr_r6
 	.global	jump_vaddr_r8
+	.hidden jump_vaddr_r8
 	.type	jump_vaddr_r8, %function
 jump_vaddr_r8:
 	eor	r2, r8, r8, lsl #16
@@ -449,6 +486,7 @@ jump_vaddr_r8:
 	b	jump_vaddr
 	.size	jump_vaddr_r8, .-jump_vaddr_r8
 	.global	jump_vaddr_r9
+	.hidden jump_vaddr_r9
 	.type	jump_vaddr_r9, %function
 jump_vaddr_r9:
 	eor	r2, r9, r9, lsl #16
@@ -456,6 +494,7 @@ jump_vaddr_r9:
 	b	jump_vaddr
 	.size	jump_vaddr_r9, .-jump_vaddr_r9
 	.global	jump_vaddr_r10
+	.hidden jump_vaddr_r10
 	.type	jump_vaddr_r10, %function
 jump_vaddr_r10:
 	eor	r2, r10, r10, lsl #16
@@ -463,6 +502,7 @@ jump_vaddr_r10:
 	b	jump_vaddr
 	.size	jump_vaddr_r10, .-jump_vaddr_r10
 	.global	jump_vaddr_r12
+	.hidden jump_vaddr_r12
 	.type	jump_vaddr_r12, %function
 jump_vaddr_r12:
 	eor	r2, r12, r12, lsl #16
@@ -470,12 +510,14 @@ jump_vaddr_r12:
 	b	jump_vaddr
 	.size	jump_vaddr_r12, .-jump_vaddr_r12
 	.global	jump_vaddr_r7
+	.hidden jump_vaddr_r7
 	.type	jump_vaddr_r7, %function
 jump_vaddr_r7:
 	eor	r2, r7, r7, lsl #16
 	add	r0, r7, #0
 	.size	jump_vaddr_r7, .-jump_vaddr_r7
 	.global	jump_vaddr
+	.hidden jump_vaddr
 	.type	jump_vaddr, %function
 jump_vaddr:
 	ldr	r1, .htptr
@@ -494,11 +536,13 @@ jump_vaddr:
 	.size	jump_vaddr, .-jump_vaddr
 	.align	2
 	.global	verify_code_ds
+	.hidden verify_code_ds
 	.type	verify_code_ds, %function
 verify_code_ds:
 	str	r8, [fp, #branch_target-dynarec_local]
 	.size	verify_code_ds, .-verify_code_ds
 	.global	verify_code_vm
+	.hidden verify_code_vm
 	.type	verify_code_vm, %function
 verify_code_vm:
 	/* r0 = instruction pointer (virtual address) */
@@ -526,6 +570,7 @@ verify_code_vm:
 	bls	.D1
 	.size	verify_code_vm, .-verify_code_vm
 	.global	verify_code
+	.hidden verify_code
 	.type	verify_code, %function
 verify_code:
 	/* r1 = source */
@@ -563,6 +608,7 @@ verify_code:
 	.size	verify_code, .-verify_code
 	.align	2
 	.global	cc_interrupt
+	.hidden cc_interrupt
 	.type	cc_interrupt, %function
 cc_interrupt:
 	ldr	r0, [fp, #last_count-dynarec_local]
@@ -613,6 +659,7 @@ cc_interrupt:
 	.size	cc_interrupt, .-cc_interrupt
 	.align	2
 	.global	do_interrupt
+	.hidden do_interrupt
 	.type	do_interrupt, %function
 do_interrupt:
 	ldr	r0, [fp, #pcaddr-dynarec_local]
@@ -626,6 +673,7 @@ do_interrupt:
 	.size	do_interrupt, .-do_interrupt
 	.align	2
 	.global	fp_exception
+	.hidden fp_exception
 	.type	fp_exception, %function
 fp_exception:
 	mov	r2, #0x10000000
@@ -643,6 +691,7 @@ fp_exception:
 	.size	fp_exception, .-fp_exception
 	.align	2
 	.global	fp_exception_ds
+	.hidden fp_exception_ds
 	.type	fp_exception_ds, %function
 fp_exception_ds:
 	mov	r2, #0x90000000 /* Set high bit if delay slot */
@@ -650,6 +699,7 @@ fp_exception_ds:
 	.size	fp_exception_ds, .-fp_exception_ds
 	.align	2
 	.global	jump_syscall
+	.hidden jump_syscall
 	.type	jump_syscall, %function
 jump_syscall:
 	ldr	r1, [fp, #reg_cop0+48-dynarec_local] /* Status */
@@ -665,12 +715,14 @@ jump_syscall:
 	.size	jump_syscall, .-jump_syscall
 	.align	2
 	.global	indirect_jump_indexed
+	.hidden indirect_jump_indexed
 	.type	indirect_jump_indexed, %function
 indirect_jump_indexed:
 	ldr	r0, [r0, r1, lsl #2]
 	.size	indirect_jump_indexed, .-indirect_jump_indexed
 	.align	2
 	.global	indirect_jump
+	.hidden indirect_jump
 	.type	indirect_jump, %function
 indirect_jump:
 	ldr	r12, [fp, #last_count-dynarec_local]
@@ -680,6 +732,7 @@ indirect_jump:
 	.size	indirect_jump, .-indirect_jump
 	.align	2
 	.global	jump_eret
+	.hidden jump_eret
 	.type	jump_eret, %function
 jump_eret:
 	ldr	r1, [fp, #reg_cop0+48-dynarec_local] /* Status */
@@ -724,6 +777,7 @@ jump_eret:
 	.size	jump_eret, .-jump_eret
 	.align	2
 	.global	new_dyna_start
+	.hidden new_dyna_start
 	.type	new_dyna_start, %function
 new_dyna_start:
 	ldr	r12, .dlptr
@@ -746,6 +800,7 @@ new_dyna_start:
 	.size	new_dyna_start, .-new_dyna_start
 	.align	2
 	.global	invalidate_addr_r0
+	.hidden invalidate_addr_r0
 	.type	invalidate_addr_r0, %function
 invalidate_addr_r0:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -754,6 +809,7 @@ invalidate_addr_r0:
 	.size	invalidate_addr_r0, .-invalidate_addr_r0
 	.align	2
 	.global	invalidate_addr_r1
+	.hidden invalidate_addr_r1
 	.type	invalidate_addr_r1, %function
 invalidate_addr_r1:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -762,6 +818,7 @@ invalidate_addr_r1:
 	.size	invalidate_addr_r1, .-invalidate_addr_r1
 	.align	2
 	.global	invalidate_addr_r2
+	.hidden invalidate_addr_r2
 	.type	invalidate_addr_r2, %function
 invalidate_addr_r2:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -770,6 +827,7 @@ invalidate_addr_r2:
 	.size	invalidate_addr_r2, .-invalidate_addr_r2
 	.align	2
 	.global	invalidate_addr_r3
+	.hidden invalidate_addr_r3
 	.type	invalidate_addr_r3, %function
 invalidate_addr_r3:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -778,6 +836,7 @@ invalidate_addr_r3:
 	.size	invalidate_addr_r3, .-invalidate_addr_r3
 	.align	2
 	.global	invalidate_addr_r4
+	.hidden invalidate_addr_r4
 	.type	invalidate_addr_r4, %function
 invalidate_addr_r4:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -786,6 +845,7 @@ invalidate_addr_r4:
 	.size	invalidate_addr_r4, .-invalidate_addr_r4
 	.align	2
 	.global	invalidate_addr_r5
+	.hidden invalidate_addr_r5
 	.type	invalidate_addr_r5, %function
 invalidate_addr_r5:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -794,6 +854,7 @@ invalidate_addr_r5:
 	.size	invalidate_addr_r5, .-invalidate_addr_r5
 	.align	2
 	.global	invalidate_addr_r6
+	.hidden invalidate_addr_r6
 	.type	invalidate_addr_r6, %function
 invalidate_addr_r6:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -802,6 +863,7 @@ invalidate_addr_r6:
 	.size	invalidate_addr_r6, .-invalidate_addr_r6
 	.align	2
 	.global	invalidate_addr_r7
+	.hidden invalidate_addr_r7
 	.type	invalidate_addr_r7, %function
 invalidate_addr_r7:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -810,6 +872,7 @@ invalidate_addr_r7:
 	.size	invalidate_addr_r7, .-invalidate_addr_r7
 	.align	2
 	.global	invalidate_addr_r8
+	.hidden invalidate_addr_r8
 	.type	invalidate_addr_r8, %function
 invalidate_addr_r8:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -818,6 +881,7 @@ invalidate_addr_r8:
 	.size	invalidate_addr_r8, .-invalidate_addr_r8
 	.align	2
 	.global	invalidate_addr_r9
+	.hidden invalidate_addr_r9
 	.type	invalidate_addr_r9, %function
 invalidate_addr_r9:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -826,6 +890,7 @@ invalidate_addr_r9:
 	.size	invalidate_addr_r9, .-invalidate_addr_r9
 	.align	2
 	.global	invalidate_addr_r10
+	.hidden invalidate_addr_r10
 	.type	invalidate_addr_r10, %function
 invalidate_addr_r10:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
@@ -834,13 +899,13 @@ invalidate_addr_r10:
 	.size	invalidate_addr_r10, .-invalidate_addr_r10
 	.align	2
 	.global	invalidate_addr_r12
+	.hidden invalidate_addr_r12
 	.type	invalidate_addr_r12, %function
 invalidate_addr_r12:
 	stmia	fp, {r0, r1, r2, r3, r12, lr}
 	lsr	r0, r12, #12	
 	.size	invalidate_addr_r12, .-invalidate_addr_r12
 	.align	2
-	.global	invalidate_addr_call
 	.type	invalidate_addr_call, %function
 invalidate_addr_call:
 	bl	invalidate_block
@@ -848,6 +913,7 @@ invalidate_addr_call:
 	.size	invalidate_addr_call, .-invalidate_addr_call
 	.align	2
 	.global	write_rdram_new
+	.hidden write_rdram_new
 	.type	write_rdram_new, %function
 write_rdram_new:
 	ldr	r3, [fp, #ram_offset-dynarec_local]
@@ -858,6 +924,7 @@ write_rdram_new:
 	.size	write_rdram_new, .-write_rdram_new
 	.align	2
 	.global	write_rdramb_new
+	.hidden write_rdramb_new
 	.type	write_rdramb_new, %function
 write_rdramb_new:
 	ldr	r3, [fp, #ram_offset-dynarec_local]
@@ -869,6 +936,7 @@ write_rdramb_new:
 	.size	write_rdramb_new, .-write_rdramb_new
 	.align	2
 	.global	write_rdramh_new
+	.hidden write_rdramh_new
 	.type	write_rdramh_new, %function
 write_rdramh_new:
 	ldr	r3, [fp, #ram_offset-dynarec_local]
@@ -881,6 +949,7 @@ write_rdramh_new:
 	.size	write_rdramh_new, .-write_rdramh_new
 	.align	2
 	.global	write_rdramd_new
+	.hidden write_rdramd_new
 	.type	write_rdramd_new, %function
 write_rdramd_new:
 	ldr	r3, [fp, #ram_offset-dynarec_local]
@@ -894,7 +963,6 @@ write_rdramd_new:
 	b	.E12
 	.size	write_rdramd_new, .-write_rdramd_new
 	.align	2
-	.global	do_invalidate
 	.type	do_invalidate, %function
 do_invalidate:
 	ldr	r2, [fp, #address-dynarec_local]
@@ -908,6 +976,7 @@ do_invalidate:
 	.size	do_invalidate, .-do_invalidate
 	.align	2
 	.global	read_nomem_new
+	.hidden read_nomem_new
 	.type	read_nomem_new, %function
 read_nomem_new:
 	ldr	r2, [fp, #address-dynarec_local]
@@ -923,6 +992,7 @@ read_nomem_new:
 	.size	read_nomem_new, .-read_nomem_new
 	.align	2
 	.global	read_nomemb_new
+	.hidden read_nomemb_new
 	.type	read_nomemb_new, %function
 read_nomemb_new:
 	ldr	r2, [fp, #address-dynarec_local]
@@ -939,6 +1009,7 @@ read_nomemb_new:
 	.size	read_nomemb_new, .-read_nomemb_new
 	.align	2
 	.global	read_nomemh_new
+	.hidden read_nomemh_new
 	.type	read_nomemh_new, %function
 read_nomemh_new:
 	ldr	r2, [fp, #address-dynarec_local]
@@ -956,6 +1027,7 @@ read_nomemh_new:
 	.size	read_nomemh_new, .-read_nomemh_new
 	.align	2
 	.global	read_nomemd_new
+	.hidden read_nomemd_new
 	.type	read_nomemd_new, %function
 read_nomemd_new:
 	ldr	r2, [fp, #address-dynarec_local]
@@ -976,6 +1048,7 @@ read_nomemd_new:
 	.size	read_nomemd_new, .-read_nomemd_new
 	.align	2
 	.global	write_nomem_new
+	.hidden write_nomem_new
 	.type	write_nomem_new, %function
 write_nomem_new:
 	str	r3, [fp, #24]
@@ -996,6 +1069,7 @@ write_nomem_new:
 	.size	write_nomem_new, .-write_nomem_new
 	.align	2
 	.global	write_nomemb_new
+	.hidden write_nomemb_new
 	.type	write_nomemb_new, %function
 write_nomemb_new:
 	str	r3, [fp, #24]
@@ -1017,6 +1091,7 @@ write_nomemb_new:
 	.size	write_nomemb_new, .-write_nomemb_new
 	.align	2
 	.global	write_nomemh_new
+	.hidden write_nomemh_new
 	.type	write_nomemh_new, %function
 write_nomemh_new:
 	str	r3, [fp, #24]
@@ -1038,6 +1113,7 @@ write_nomemh_new:
 	.size	write_nomemh_new, .-write_nomemh_new
 	.align	2
 	.global	write_nomemd_new
+	.hidden write_nomemd_new
 	.type	write_nomemd_new, %function
 write_nomemd_new:
 	str	r3, [fp, #24]
@@ -1061,7 +1137,6 @@ write_nomemd_new:
 	mov	pc, lr
 	.size	write_nomemd_new, .-write_nomemd_new
 	.align	2
-	.global	tlb_exception
 	.type	tlb_exception, %function
 tlb_exception:
 	/* r1 = cause */
@@ -1114,9 +1189,24 @@ tlb_exception:
 	.size	tlb_exception, .-tlb_exception
 	.align	2
 	.global	breakpoint
+	.hidden breakpoint
 	.type	breakpoint, %function
 breakpoint:
 	/* Set breakpoint here for debugging */
 	mov	pc, lr
 	.size	breakpoint, .-breakpoint
+/*  The following bug-fix implements __clear_cache (missing in Android)  */
+	.align	2
+	.global	__clear_cache_bugfix
+	.hidden __clear_cache_bugfix
+	.type	__clear_cache_bugfix, %function
+__clear_cache_bugfix:
+	push    {r7, lr}
+	mov     r2, #0
+	mov     r7, #0x2
+	add     r7, r7, #0xf0000
+	svc     0x00000000
+	pop     {r7, pc}
+	.size	__clear_cache_bugfix, .-__clear_cache_bugfix
+/*  End of bug-fix	*/
 	.section	.note.GNU-stack,"",%progbits

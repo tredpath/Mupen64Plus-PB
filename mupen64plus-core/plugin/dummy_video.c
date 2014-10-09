@@ -26,6 +26,27 @@
 #include "plugin.h"
 #include "dummy_video.h"
 
+m64p_error dummyvideo_PluginGetVersion(m64p_plugin_type *PluginType, int *PluginVersion,
+                                       int *APIVersion, const char **PluginNamePtr, int *Capabilities)
+{
+    if (PluginType != NULL)
+        *PluginType = M64PLUGIN_GFX;
+
+    if (PluginVersion != NULL)
+        *PluginVersion = 0x00010000;
+
+    if (APIVersion != NULL)
+        *APIVersion = GFX_API_VERSION;
+
+    if (PluginNamePtr != NULL)
+        *PluginNamePtr = "Mupen64Plus-NoVideo";
+
+    if (Capabilities != NULL)
+        *Capabilities = 0;
+
+    return M64ERR_SUCCESS;
+}
+
 void dummyvideo_ChangeWindow (void)
 {
 
@@ -85,9 +106,9 @@ void dummyvideo_ReadScreen2 (void *dest, int *width, int *height, int front)
 
 }
 
-void dummyvideo_SetRenderingCallback(void (*callback)(void))
+void dummyvideo_SetRenderingCallback(void (*callback)(int))
 {
-	DebugMessage(M64MSG_WARNING,"Dummy plugin received callback.");
+
 }
 
 void dummyvideo_FBRead(unsigned int addr)
@@ -101,4 +122,9 @@ void dummyvideo_FBWrite(unsigned int addr, unsigned int size)
 void dummyvideo_FBGetFrameBufferInfo(void *p)
 {
 }
+
+void dummyvideo_ResizeVideoOutput(int width, int height)
+{
+}
+
 

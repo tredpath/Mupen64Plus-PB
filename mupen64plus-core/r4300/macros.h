@@ -23,7 +23,7 @@
 #define MACROS_H
 
 #define sign_extended(a) a = (long long)((int)a)
-#define sign_extendedb(a) a = (long long)((char)a)
+#define sign_extendedb(a) a = (long long)((signed char)a)
 #define sign_extendedh(a) a = (long long)((short)a)
 
 #define rrt *PC->f.r.rt
@@ -34,22 +34,18 @@
 #define irt *PC->f.i.rt
 #define ioffset PC->f.i.immediate
 #define iimmediate PC->f.i.immediate
-#define lsaddr ((PC-1)->f.i.immediate+(*(PC-1)->f.i.rs))
-#define lsrt *(PC-1)->f.i.rt
 #define irs *PC->f.i.rs
 #define ibase *PC->f.i.rs
 #define jinst_index PC->f.j.inst_index
 #define lfbase PC->f.lf.base
 #define lfft PC->f.lf.ft
 #define lfoffset PC->f.lf.offset
-#define lslfaddr ((PC-1)->f.lf.offset+reg[(PC-1)->f.lf.base])
-#define lslfft (PC-1)->f.lf.ft
 #define cfft PC->f.cf.ft
 #define cffs PC->f.cf.fs
 #define cffd PC->f.cf.fd
 
 // 32 bits macros
-#ifndef _BIG_ENDIAN
+#ifndef M64P_BIG_ENDIAN
 #define rrt32 *((int*)PC->f.r.rt)
 #define rrd32 *((int*)PC->f.r.rd)
 #define rrs32 *((int*)PC->f.r.rs)

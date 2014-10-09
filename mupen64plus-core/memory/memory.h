@@ -57,6 +57,18 @@ extern void (*writememb[0x10000])(void);
 extern void (*writememh[0x10000])(void);
 extern void (*writememd[0x10000])(void);
 
+extern unsigned int *readrdramreg[0x10000];
+extern unsigned int *readrspreg[0x10000];
+extern unsigned int *readrsp[0x10000];
+extern unsigned int *readmi[0x10000];
+extern unsigned int *readvi[0x10000];
+extern unsigned int *readai[0x10000];
+extern unsigned int *readpi[0x10000];
+extern unsigned int *readri[0x10000];
+extern unsigned int *readsi[0x10000];
+extern unsigned int *readdp[0x10000];
+extern unsigned int *readdps[0x10000];
+
 typedef struct _RDRAM_register
 {
    unsigned int rdram_config;
@@ -79,21 +91,6 @@ typedef struct _SP_register
    unsigned int sp_wr_len_reg;
    unsigned int w_sp_status_reg;
    unsigned int sp_status_reg;
-   char halt;
-   char broke;
-   char dma_busy;
-   char dma_full;
-   char io_full;
-   char single_step;
-   char intr_break;
-   char signal0;
-   char signal1;
-   char signal2;
-   char signal3;
-   char signal4;
-   char signal5;
-   char signal6;
-   char signal7;
    unsigned int sp_dma_full_reg;
    unsigned int sp_dma_busy_reg;
    unsigned int sp_semaphore_reg;
@@ -112,17 +109,6 @@ typedef struct _DPC_register
    unsigned int dpc_current;
    unsigned int w_dpc_status;
    unsigned int dpc_status;
-   char xbus_dmem_dma;
-   char freeze;
-   char flush;
-   char start_glck;
-   char tmem_busy;
-   char pipe_busy;
-   char cmd_busy;
-   char cbuf_busy;
-   char dma_busy;
-   char end_valid;
-   char start_valid;
    unsigned int dpc_clock;
    unsigned int dpc_bufbusy;
    unsigned int dpc_pipebusy;
@@ -141,20 +127,10 @@ typedef struct _mips_register
 {
    unsigned int w_mi_init_mode_reg;
    unsigned int mi_init_mode_reg;
-   char init_length;
-   char init_mode;
-   char ebus_test_mode;
-   char RDRAM_reg_mode;
    unsigned int mi_version_reg;
    unsigned int mi_intr_reg;
    unsigned int mi_intr_mask_reg;
    unsigned int w_mi_intr_mask_reg;
-   char SP_intr_mask;
-   char SI_intr_mask;
-   char AI_intr_mask;
-   char VI_intr_mask;
-   char PI_intr_mask;
-   char DP_intr_mask;
 } mips_register;
 
 typedef struct _VI_register
@@ -239,9 +215,9 @@ extern AI_register ai_register;
 extern DPC_register dpc_register;
 extern DPS_register dps_register;
 
-extern unsigned char *rdramb;
+extern unsigned char *const rdramb;
 
-#ifndef _BIG_ENDIAN
+#ifndef M64P_BIG_ENDIAN
 #define sl(mot) \
 ( \
 ((mot & 0x000000FF) << 24) | \
@@ -418,15 +394,20 @@ void write_pifb(void);
 void write_pifh(void);
 void write_pifd(void);
 
-void update_SP(void);
-void update_DPC(void);
-void update_MI_init_mode_reg(void);
+void make_w_sp_status_reg(void);
+void make_w_dpc_status(void);
+void make_w_mi_init_mode_reg(void);
 void update_MI_intr_mode_reg(void);
 void update_MI_init_mask_reg(void);
-void update_MI_intr_mask_reg(void);
+void make_w_mi_intr_mask_reg(void);
 void update_ai_dacrate(unsigned int word);
 void update_vi_status(unsigned int word);
 void update_vi_width(unsigned int word);
+
+/* Returns a pointer to a block of contiguous memory
+ * Can access RDRAM, SP_DMEM, SP_IMEM and ROM, using TLB if necessary
+ * Useful for getting fast access to a zone with executable code. */
+unsigned int *fast_mem_access(unsigned int address);
 
 #endif
 

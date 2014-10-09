@@ -25,7 +25,9 @@
    
 #include <stdlib.h>
 
+#define M64P_CORE_PROTOTYPES 1
 #include "m64p_types.h"
+#include "m64p_debugger.h"
 #include "callbacks.h"
 #include "debugger.h"
 
@@ -317,10 +319,7 @@ EXPORT void * CALL DebugGetCPUDataPtr(m64p_dbg_cpu_data cpu_data_type)
     switch (cpu_data_type)
     {
         case M64P_CPU_PC:
-            if (r4300emu == CORE_PURE_INTERPRETER)
-                return &interp_addr;
-            else
-                return &PC->addr;
+            return &PC->addr;
         case M64P_CPU_REG_REG:
             return reg;
         case M64P_CPU_REG_HI:

@@ -1,6 +1,7 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  *   Mupen64plus-core - m64p_types.h                                       *
  *   Mupen64Plus homepage: http://code.google.com/p/mupen64plus/           *
+ *   Copyright (C) 2012 CasualJames                                        *
  *   Copyright (C) 2009 Richard Goedeken                                   *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
@@ -51,6 +52,9 @@
 typedef void * m64p_handle;
 
 typedef void (*m64p_frame_callback)(unsigned int FrameIndex);
+typedef void (*m64p_input_callback)(void);
+typedef void (*m64p_audio_callback)(void);
+typedef void (*m64p_vi_callback)(void);
 
 typedef enum {
   M64TYPE_INT = 1,
@@ -113,10 +117,21 @@ typedef enum {
 } m64p_video_mode;
 
 typedef enum {
+  M64VIDEOFLAG_SUPPORT_RESIZING = 1
+} m64p_video_flags;
+
+typedef enum {
   M64CORE_EMU_STATE = 1,
   M64CORE_VIDEO_MODE,
   M64CORE_SAVESTATE_SLOT,
-  M64CORE_SPEED_FACTOR
+  M64CORE_SPEED_FACTOR,
+  M64CORE_SPEED_LIMITER,
+  M64CORE_VIDEO_SIZE,
+  M64CORE_AUDIO_VOLUME,
+  M64CORE_AUDIO_MUTE,
+  M64CORE_INPUT_GAMESHARK,
+  M64CORE_STATE_LOADCOMPLETE,
+  M64CORE_STATE_SAVECOMPLETE
 } m64p_core_param;
 
 typedef enum {
@@ -136,7 +151,11 @@ typedef enum {
   M64CMD_SEND_SDL_KEYDOWN,
   M64CMD_SEND_SDL_KEYUP,
   M64CMD_SET_FRAME_CALLBACK,
-  M64CMD_TAKE_NEXT_SCREENSHOT
+  M64CMD_TAKE_NEXT_SCREENSHOT,
+  M64CMD_CORE_STATE_SET,
+  M64CMD_READ_SCREEN,
+  M64CMD_RESET,
+  M64CMD_ADVANCE_FRAME
 } m64p_command;
 
 typedef struct {
@@ -147,6 +166,13 @@ typedef struct {
 /* ----------------------------------------- */
 /* Structures to hold ROM image information  */
 /* ----------------------------------------- */
+
+typedef enum
+{
+    SYSTEM_NTSC = 0,
+    SYSTEM_PAL,
+    SYSTEM_MPAL
+} m64p_system_type;
 
 typedef struct
 {
@@ -200,6 +226,35 @@ typedef enum {
 } m64p_dbg_mem_info;
 
 typedef enum {
+  M64P_MEM_NOMEM = 0,
+  M64P_MEM_NOTHING,
+  M64P_MEM_RDRAM,
+  M64P_MEM_RDRAMREG,
+  M64P_MEM_RSPMEM,
+  M64P_MEM_RSPREG,
+  M64P_MEM_RSP,
+  M64P_MEM_DP,
+  M64P_MEM_DPS,
+  M64P_MEM_VI,
+  M64P_MEM_AI,
+  M64P_MEM_PI,
+  M64P_MEM_RI,
+  M64P_MEM_SI,
+  M64P_MEM_FLASHRAMSTAT,
+  M64P_MEM_ROM,
+  M64P_MEM_PIF,
+  M64P_MEM_MI,
+  M64P_MEM_BREAKPOINT
+} m64p_dbg_mem_type;
+
+typedef enum {
+  M64P_MEM_FLAG_READABLE = 0x01,
+  M64P_MEM_FLAG_WRITABLE = 0x02,
+  M64P_MEM_FLAG_READABLE_EMUONLY = 0x04,  // the EMUONLY flags signify that emulated code can read/write here, but debugger cannot
+  M64P_MEM_FLAG_WRITABLE_EMUONLY = 0x08
+} m64p_dbg_mem_flags;
+
+typedef enum {
   M64P_DBG_PTR_RDRAM = 1,
   M64P_DBG_PTR_PI_REG,
   M64P_DBG_PTR_SI_REG,
@@ -231,6 +286,30 @@ typedef enum {
   M64P_BKP_CMD_CHECK
 } m64p_dbg_bkp_command;
 
+#define M64P_MEM_INVALID        0xFFFFFFFF  // invalid memory read will return this
+
+#define BREAKPOINTS_MAX_NUMBER  128
+
+#define BPT_FLAG_ENABLED        0x01
+#define BPT_FLAG_CONDITIONAL    0x02
+#define BPT_FLAG_COUNTER        0x04
+#define BPT_FLAG_READ           0x08
+#define BPT_FLAG_WRITE          0x10
+#define BPT_FLAG_EXEC           0x20
+#define BPT_FLAG_LOG            0x40 //Log to the console when this breakpoint hits.
+
+#define BPT_CHECK_FLAG(a, b)  ((a.flags & b) == b)
+#define BPT_SET_FLAG(a, b)    a.flags = (a.flags | b);
+#define BPT_CLEAR_FLAG(a, b)  a.flags = (a.flags & (~b));
+#define BPT_TOGGLE_FLAG(a, b) a.flags = (a.flags ^ b);
+
+typedef struct _breakpoint {
+    unsigned int address; 
+    unsigned int endaddr;
+    unsigned int flags;
+    //unsigned int condition;  //Placeholder for breakpoint condition
+    } breakpoint;
+
 /* ------------------------------------------------- */
 /* Structures and Types for Core Video Extension API */
 /* ------------------------------------------------- */
@@ -258,12 +337,14 @@ typedef struct {
   m64p_error (*VidExtFuncInit)(void);
   m64p_error (*VidExtFuncQuit)(void);
   m64p_error (*VidExtFuncListModes)(m64p_2d_size *, int *);
-  m64p_error (*VidExtFuncSetMode)(int, int, int, int);
+  m64p_error (*VidExtFuncSetMode)(int, int, int, int, int);
   void *     (*VidExtFuncGLGetProc)(const char*);
   m64p_error (*VidExtFuncGLSetAttr)(m64p_GLattr, int);
+  m64p_error (*VidExtFuncGLGetAttr)(m64p_GLattr, int *);
   m64p_error (*VidExtFuncGLSwapBuf)(void);
   m64p_error (*VidExtFuncSetCaption)(const char *);
   m64p_error (*VidExtFuncToggleFS)(void);
+  m64p_error (*VidExtFuncResizeWindow)(int, int);
 } m64p_video_extension_functions;
 
 #endif /* define M64P_TYPES_H */

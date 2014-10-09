@@ -33,31 +33,18 @@ int wstrlen(const wchar_t * s)
 
 namespace OGLFT 
 {
-    // This is the static instance of the FreeType library wrapper ...
-    Library Library::library;
-
-    // ... and this is the FreeType library handle itself.
-    FT_Library Library::library_;
-
-    
-    // The static instance above causes this constructor to be called
-    // when the object module is loaded.
-    Library::Library (void)
+    FT_Library ft_library;
+    bool Init_FT(void)
     {
-        FT_Error error = FT_Init_FreeType(&library_);
+        FT_Error error = FT_Init_FreeType(&ft_library);
         if(error != 0) std::cerr << "[OGLFT] Could not initialize the FreeType library." << std::endl;
+        return (error == 0);
     }
-
-    Library::~Library (void)
+    bool Uninit_FT(void)
     {
-        FT_Error error = FT_Done_FreeType(library_);
+        FT_Error error = FT_Done_FreeType(ft_library);
         if(error != 0) std::cerr << "[OGLFT] Could not terminate the FreeType library." << std::endl;
-    }
-
-    // Return the only instance in the process
-    FT_Library& Library::instance (void)
-    {
-        return library_;
+        return (error == 0);
     }
 
     // Load a new face
@@ -66,7 +53,7 @@ namespace OGLFT
     {
         valid_ = true;
         FT_Face ft_face;
-        FT_Error error = FT_New_Face(Library::instance(), filename, 0, &ft_face);
+        FT_Error error = FT_New_Face(ft_library, filename, 0, &ft_face);
         if(error != 0) 
         {
             valid_ = false;
@@ -139,7 +126,7 @@ namespace OGLFT
     {
         FT_Face ft_face;
 
-        FT_Error error = FT_New_Face(Library::instance(), filename, 0, &ft_face);
+        FT_Error error = FT_New_Face(ft_library, filename, 0, &ft_face);
 
         if(error != 0) return false;
 
@@ -299,6 +286,17 @@ namespace OGLFT
                 bbox += char_bbox;
             }
         }
+        // make sure the origin is at 0,0
+        if (bbox.x_min_ != 0)
+        {
+            bbox.x_max_ -= bbox.x_min_;
+            bbox.x_min_ = 0;
+        }
+        if (bbox.y_min_ != 0)
+        {
+            bbox.y_max_ -= bbox.y_min_;
+            bbox.y_min_ = 0;
+        }
 
         return bbox;
     }
@@ -356,6 +354,17 @@ namespace OGLFT
                 BBox char_bbox = measure(s[i]);
                 bbox += char_bbox;
             }
+        }
+        // make sure the origin is at 0,0
+        if (bbox.x_min_ != 0)
+        {
+            bbox.x_max_ -= bbox.x_min_;
+            bbox.x_min_ = 0;
+        }
+        if (bbox.y_min_ != 0)
+        {
+            bbox.y_max_ -= bbox.y_min_;
+            bbox.y_min_ = 0;
         }
         return bbox;
     }
@@ -640,7 +649,7 @@ namespace OGLFT
 
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B], foreground_color_[A]);
 
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
 
         draw(c);
     }
@@ -653,7 +662,7 @@ namespace OGLFT
 
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B], foreground_color_[A]);
 
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
 
         draw(c);
     }
@@ -667,7 +676,7 @@ namespace OGLFT
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B],
                 foreground_color_[A]);
 
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
 
         draw(c);
     }
@@ -680,7 +689,7 @@ namespace OGLFT
 
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B], foreground_color_[A]);
 
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
 
         draw(c);
     }
@@ -770,7 +779,7 @@ namespace OGLFT
 
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B], foreground_color_[A]);
 
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
 
         draw(s);
 
@@ -827,7 +836,7 @@ namespace OGLFT
             glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B],
                         foreground_color_[A]);
 
-            glRasterPos2i(0, 0);
+            glRasterPos3i(0, 0, 0);
 
             draw(s);
 
@@ -925,7 +934,7 @@ namespace OGLFT
 
         glTranslatef(x, y, z);
         glColor4f(foreground_color_[R], foreground_color_[G], foreground_color_[B], foreground_color_[A]);
-        glRasterPos2i(0, 0);
+        glRasterPos3i(0, 0, 0);
         draw(s);
 
         if(horizontal_justification_!=ORIGIN||vertical_justification_!= BASELINE)

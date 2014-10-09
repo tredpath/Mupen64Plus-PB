@@ -1,7 +1,7 @@
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 *   Mupen64plus - version.h                                               *
 *   Mupen64Plus homepage: http://code.google.com/p/mupen64plus/           *
-*   Copyright (C) 2008 Richard42 DarkJeztr Tillin9                        *
+*   Copyright (C) 2008-2012 Richard42 DarkJeztr Tillin9                   *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License as published by  *
@@ -25,11 +25,12 @@
 #define __VERSION_H__
 
 #define MUPEN_CORE_NAME "Mupen64Plus Core"
-#define MUPEN_CORE_VERSION 0x016304
-#define MUPEN_API_VERSION  0x10000
+#define MUPEN_CORE_VERSION 0x020000
 
-#define MINIMUM_FRONTEND_API_VERSION 0x10000
-#define MINIMUM_PLUGIN_API_VERSION 0x10000
+#define FRONTEND_API_VERSION 0x020101
+#define CONFIG_API_VERSION   0x020200
+#define DEBUG_API_VERSION    0x020000
+#define VIDEXT_API_VERSION   0x030000
 
 #define VERSION_PRINTF_SPLIT(x) (((x) >> 16) & 0xffff), (((x) >> 8) & 0xff), ((x) & 0xff)
 
