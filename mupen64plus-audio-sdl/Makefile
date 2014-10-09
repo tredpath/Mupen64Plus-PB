@@ -41,13 +41,13 @@ LDFLAGS += $(SHARED)
 CFLAGS += -fPIC
 LDFLAGS += -fPIC
 
-CFLAGS  += -I../blackberry-SDL/include
-LDLIBS += -L../blackberry-SDL/Device-Debug -lSDL12
+CFLAGS  += -I../blackberry-SDL/include -DUSE_SRC
+LDLIBS += -L../libs -lSDL12
 
-CFLAGS  += -I..//mupen64plus-core/api
+CFLAGS  += -I../mupen64plus-core/api
 
 # set base program pointers and flags
-CC_OVERRIDE = C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp -w1 -shared
+CC_OVERRIDE = J:/bbndk-2.1.0/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp -w1 -shared
 CC = $(CC_OVERRIDE)
 RM       ?= rm -f
 INSTALL  ?= install
@@ -59,13 +59,17 @@ LINK.o = $(CC) $(LDFLAGS)
 SOURCE = \
 	main.c \
 	volume.c \
-	osal_dynamiclib_unix.c
+	osal_dynamiclib_unix.c \
+	samplerate.c \
+	src_linear.c \
+	src_sinc.c \
+	src_zoh.c
 
 # generate a list of object files build, make a temporary directory for them
 #OBJDIRS = _obj
 OBJDIRS = .
 $(shell $(MKDIR) $(OBJDIRS))
-OBJECTS := $(OBJDIRS)/main.o $(OBJDIRS)/volume.o $(OBJDIRS)/osal_dynamiclib_unix.o
+OBJECTS := $(OBJDIRS)/main.o $(OBJDIRS)/volume.o $(OBJDIRS)/osal_dynamiclib_unix.o $(OBJDIRS)/samplerate.o $(OBJDIRS)/src_linear.o $(OBJDIRS)/src_sinc.o $(OBJDIRS)/src_zoh.o
 
 # build dependency files
 CFLAGS += -MD
