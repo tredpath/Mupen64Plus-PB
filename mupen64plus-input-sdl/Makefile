@@ -75,8 +75,8 @@ ifeq ($(OS), LINUX)
   ifeq ($(CPU),ARM)
     #headers for palm, sdl
      #CFLAGS += -I/opt/PalmPDK/include
-    CFLAGS += -I../blackberry-SDL/include -I../blackberry-SDL_image/ -I../blackberry-SDL_ttf/ -IC:\bbndk-2.1.0-beta1\target\qnx6/usr/include/freetype2
-    LDLIBS += -L../blackberry-SDL/Device-Debug -lSDL12 -lGLESv2 -L../libs/ -lbbutil
+    CFLAGS += -I../blackberry-SDL/include -I../blackberry-SDL_image/ -I../blackberry-SDL_ttf/ -IJ:\bbndk-2.1.0\target\qnx6/usr/include/freetype2 -I..\bbutil
+    LDLIBS += -lSDL12 -lGLESv2 -L../libs/ -lbbutil
     #CFLAGS += -D__linux__ -DTOUCHPAD_UI -DPRE
     CFLAGS += -DPRE -DTOUCHPAD_UI
   endif
@@ -117,7 +117,7 @@ else
   endif
 endif
 
-CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk-2.1.0/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p

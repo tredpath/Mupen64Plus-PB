@@ -27,7 +27,7 @@
 
 #include "plugin.h"
 #include <SDL.h>
-#include "../bbutil/bbutil.h"
+#include "bbutil.h"
 #include <GLES2/gl2.h>
 //#include <SDL_image.h>
 

@@ -138,6 +138,8 @@ void DebugMessage(int level, const char *message, ...)
 
   (*l_DebugCallback)(l_DebugCallContext, level, msgbuf);
 
+  fflush(stdout);
+
   va_end(args);
 }
 

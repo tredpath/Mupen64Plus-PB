@@ -35,7 +35,6 @@ TouchStick touchStick;
 
 int showMenu = 1;
 int showController = 1;
-float save = 0.0f, load = 0.0f;
 
 //UIQuad* overlayQuad = NULL;
 //UIQuad* stickQuad = NULL;
@@ -76,7 +75,7 @@ void LoadOverlay(char* name)
 		overlayQuad = create_image(tmp, 0, 0, 0);
 
 		printf("\nLoading Stick...\n");fflush(stdout);
-		sprintf(tmp,"%s/%sStick.png",OVERLAY_DIR,name);
+		sprintf(tmp,"%s/DefaultStick.png",OVERLAY_DIR);
 		stickQuad = create_image(tmp, 0, 0, 0);
 	//}
 }
@@ -125,7 +124,10 @@ void InitTouchInput()
 		osd_save = create_text(font, 400.0f, 0.0f, "Game State Saved!");
 		osd_load = create_text(font, 400.0f, 0.0f, "Game State Loaded!");
 
-		LoadOverlay("Default");
+		if (controller_overlay == 0)
+			LoadOverlay("Default");
+		else
+			LoadOverlay("Alternate");
 		initialized_n64 = 1;
 	}
 	//font = TTF_OpenFont(PRELUDE_FONT_PATH,30);
@@ -328,11 +330,11 @@ void ProcessTouchEvent(screen_event_t *event,SController* controller,unsigned sh
 			if (x < 100) {
 				//save button
 				CoreDoCommand(M64CMD_STATE_SAVE,1,NULL);
-				save = 1;
+				touch_save = 1;
 			} else if (x > 924) {
 				//load
 				CoreDoCommand(M64CMD_STATE_LOAD,0,NULL);
-				load = 1;
+				touch_load = 1;
 			}
 		}
 	}
@@ -437,21 +439,21 @@ void DrawController()
 
 void DrawMenu()
 {
-	render_text(font, saveButton);
-	render_text(font, loadButton);
+	//render_text(font, saveButton);
+	//render_text(font, loadButton);
 	//UIDrawQuad(changeOverlayButton);
 	//UIDrawQuad(toggleAccelerometerButton);
 
-	if(save > 0){
-		osd_save->alpha = save;
+	if(touch_save > 0){
+		osd_save->alpha = touch_save;
 		render_text(font, osd_save);
-		save -= 0.02f;
+		touch_save -= 0.02f;
 
 	}
-	if(load > 0){
-		osd_load->alpha = load;
+	if(touch_load > 0){
+		osd_load->alpha = touch_load;
 		render_text(font, osd_load);
-		load -= 0.02f;
+		touch_load -= 0.02f;
 	}
 }
 

@@ -69,9 +69,9 @@ enum EButton
 
 typedef struct
 {
-    int button;         // button index; -1 if notassigned
+    int button;         // button index; -1 if not assigned
     SDLKey key;         // sdl keysym; SDLK_UNKNOWN if not assigned
-    int axis, axis_dir; // aixs + direction (i.e. 0, 1 = X Axis +; 0, -1 = X Axis -); -1 if notassigned
+    int axis, axis_dir; // axis + direction (i.e. 0, 1 = X Axis +; 0, -1 = X Axis -); -1 if not assigned
     int axis_deadzone;  // -1 for default, or >= 0 for custom value
     int hat, hat_pos;   // hat + hat position; -1 if not assigned
     int mouse;          // mouse button
@@ -97,7 +97,7 @@ typedef struct
     int           device;           // joystick device; -1 = keyboard; -2 = none
     int           mouse;            // mouse enabled: 0 = no; 1 = yes
     SDL_Joystick *joystick;         // SDL joystick device
-    int           event_joystick;   // the /dev/input/eventX device for force feeback
+    int           event_joystick;   // the /dev/input/eventX device for force feedback
     int           axis_deadzone[2]; // minimum absolute value before analog movement is recognized
     int           axis_peak[2];     // highest analog value returned by SDL, used for scaling
 } SController;
