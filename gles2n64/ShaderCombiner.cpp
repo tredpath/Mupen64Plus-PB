@@ -1,11 +1,11 @@
-
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include "OpenGL.h"
 #include "ShaderCombiner.h"
 #include "Common.h"
 #include "Textures.h"
 #include "Config.h"
+
 
 //(sa - sb) * m + a
 static const u32 saRGBExpanded[] =
@@ -165,7 +165,7 @@ const char * _color_param_str(int param)
 {
     switch(param)
     {
-        case COMBINED:          return "gl_FragColor.rgb";
+        case COMBINED:          return "lFragColor.rgb";
         case TEXEL0:            return "lTex0.rgb";
         case TEXEL1:            return "lTex1.rgb";
         case PRIMITIVE:         return "uPrimColor.rgb";
@@ -173,7 +173,7 @@ const char * _color_param_str(int param)
         case ENVIRONMENT:       return "uEnvColor.rgb";
         case CENTER:            return "vec3(0.0)";
         case SCALE:             return "vec3(0.0)";
-        case COMBINED_ALPHA:    return "vec3(gl_FragColor.a)";
+        case COMBINED_ALPHA:    return "vec3(lFragColor.a)";
         case TEXEL0_ALPHA:      return "vec3(lTex0.a)";
         case TEXEL1_ALPHA:      return "vec3(lTex1.a)";
         case PRIMITIVE_ALPHA:   return "vec3(uPrimColor.a)";
@@ -195,7 +195,7 @@ const char * _alpha_param_str(int param)
 {
     switch(param)
     {
-        case COMBINED:          return "gl_FragColor.a";
+        case COMBINED:          return "lFragColor.a";
         case TEXEL0:            return "lTex0.a";
         case TEXEL1:            return "lTex1.a";
         case PRIMITIVE:         return "uPrimColor.a";
@@ -203,7 +203,7 @@ const char * _alpha_param_str(int param)
         case ENVIRONMENT:       return "uEnvColor.a";
         case CENTER:            return "0.0";
         case SCALE:             return "0.0";
-        case COMBINED_ALPHA:    return "gl_FragColor.a";
+        case COMBINED_ALPHA:    return "lFragColor.a";
         case TEXEL0_ALPHA:      return "lTex0.a";
         case TEXEL1_ALPHA:      return "lTex1.a";
         case PRIMITIVE_ALPHA:   return "uPrimColor.a";
@@ -259,9 +259,7 @@ DecodedMux::DecodedMux(u64 mux, bool cycle2)
 
     //simplifying mux:
     if (replace(G_CYC_1CYCLE, LOD_FRACTION, ZERO) || replace(G_CYC_2CYCLE, LOD_FRACTION, ZERO))
-    {
-        //LOG(LOG_VERBOSE, "SC Replacing LOD_FRACTION with ZERO\n");
-    }
+        LOG(LOG_VERBOSE, "SC Replacing LOD_FRACTION with ZERO\n");
 #if 1
     if (replace(G_CYC_1CYCLE, K4, ZERO) || replace(G_CYC_2CYCLE, K4, ZERO))
         LOG(LOG_VERBOSE, "SC Replacing K4 with ZERO\n");

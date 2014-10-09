@@ -2,7 +2,7 @@
 #ifndef SHADERCOMBINER_H
 #define SHADERCOMBINER_H
 
-//#define PRINT_SHADER
+#define PRINT_SHADER
 #define UNIFORM_CHECK
 
 #define SC_FOGENABLED           0x1

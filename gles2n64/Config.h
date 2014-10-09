@@ -7,14 +7,12 @@ struct Config
 
     struct
     {
-        int width, height;
         int flipVertical;
     } screen;
 
     struct
     {
-        int enableX11;
-        int fullscreen, centre, xpos, ypos, width, height;
+        int xpos, ypos, width, height, refwidth, refheight;
     } window;
 
     struct
@@ -46,6 +44,7 @@ struct Config
     int     zHack;
 
     int     autoFrameSkip;
+    int     maxFrameSkip;
     int     targetFPS;
     int     frameRenderRate;
     int     verticalSync;
@@ -57,6 +56,11 @@ struct Config
     int     enableClipping;
     int     enableFaceCulling;
     int     enableNoise;
+
+// paulscode: removed from pre-compile to a config option
+//// (part of the Galaxy S Zelda crash-fix
+    int     tribufferOpt;
+//
 
     int     hackBanjoTooie;
     int     hackZelda;

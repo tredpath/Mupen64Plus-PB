@@ -18,7 +18,6 @@
 #include "VI.h"
 #include "DepthBuffer.h"
 #include "Config.h"
-#include "gSPNeon.h"
 
 //Note: 0xC0 is used by 1080 alot, its an unknown command.
 
@@ -29,7 +28,7 @@ extern char uc_str[256];
 
 void gSPCombineMatrices();
 
-#ifdef __TRIBUFFER_OPT
+//#ifdef __TRIBUFFER_OPT
 void __indexmap_init()
 {
     memset(OGL.triangles.indexmapinv, 0xFF, VERTBUFF_SIZE*sizeof(u32));
@@ -151,7 +150,7 @@ u32 __indexmap_getnew(u32 index, u32 num)
 
     return ind;
 }
-#endif
+//#endif
 
 void gSPTriangle(s32 v0, s32 v1, s32 v2)
 {
@@ -222,7 +221,7 @@ f32 identityMatrix[4][4] =
 };
 
 #ifdef __VEC4_OPT
-void gSPTransformVertex4(u32 v, float mtx[4][4])
+static void gSPTransformVertex4_default(u32 v, float mtx[4][4])
 {
     float x, y, z, w;
     int i;
@@ -252,7 +251,7 @@ void gSPClipVertex4(u32 v)
     }
 }
 
-void gSPTransformNormal4(u32 v, float mtx[4][4])
+static void gSPTransformNormal4_default(u32 v, float mtx[4][4])
 {
     float len, x, y, z;
     int i;
@@ -277,7 +276,7 @@ void gSPTransformNormal4(u32 v, float mtx[4][4])
     }
 }
 
-void gSPLightVertex4(u32 v)
+static void gSPLightVertex4_default(u32 v)
 {
     gSPTransformNormal4(v, gSP.matrix.modelView[gSP.matrix.modelViewi]);
     for(int j = 0; j < 4; j++)
@@ -286,13 +285,22 @@ void gSPLightVertex4(u32 v)
         r = gSP.lights[gSP.numLights].r;
         g = gSP.lights[gSP.numLights].g;
         b = gSP.lights[gSP.numLights].b;
+
         for (int i = 0; i < gSP.numLights; i++)
         {
             f32 intensity = DotProduct( &OGL.triangles.vertices[v+j].nx, &gSP.lights[i].x );
             if (intensity < 0.0f) intensity = 0.0f;
+/*
+// paulscode, cause of the shader bug (not applying intensity to correct varriables)
             OGL.triangles.vertices[v+j].r += gSP.lights[i].r * intensity;
             OGL.triangles.vertices[v+j].g += gSP.lights[i].g * intensity;
             OGL.triangles.vertices[v+j].b += gSP.lights[i].b * intensity;
+*/
+//// paulscode, shader bug-fix:
+            r += gSP.lights[i].r * intensity;
+            g += gSP.lights[i].g * intensity;
+            b += gSP.lights[i].b * intensity;
+////
         }
         OGL.triangles.vertices[v+j].r = min(1.0f, r);
         OGL.triangles.vertices[v+j].g = min(1.0f, g);
@@ -300,7 +308,7 @@ void gSPLightVertex4(u32 v)
     }
 }
 
-void gSPBillboardVertex4(u32 v)
+static void gSPBillboardVertex4_default(u32 v)
 {
 
     int i = 0;
@@ -331,11 +339,7 @@ void gSPProcessVertex4(u32 v)
     if (gSP.changed & CHANGED_MATRIX)
         gSPCombineMatrices();
 
-#if __NEON_OPT
-    gSPTransformVertex4NEON(v, gSP.matrix.combined );
-#else
     gSPTransformVertex4(v, gSP.matrix.combined );
-#endif
 
     if (config.screen.flipVertical)
     {
@@ -354,13 +358,7 @@ void gSPProcessVertex4(u32 v)
     }
 
     if (gSP.matrix.billboard)
-    {
-#ifdef __NEON_OPT
-        gSPBillboardVertex4NEON(v);
-#else
         gSPBillboardVertex4(v);
-#endif
-    }
 
     if (!(gSP.geometryMode & G_ZBUFFER))
     {
@@ -374,11 +372,7 @@ void gSPProcessVertex4(u32 v)
     {
         if (config.enableLighting)
         {
-#ifdef __NEON_OPT
-            gSPLightVertex4NEON(v);
-#else
             gSPLightVertex4(v);
-#endif
         }
         else
         {
@@ -440,7 +434,7 @@ void gSPClipVertex(u32 v)
     //if (vtx->w < 0.1f)      vtx->clip |= CLIP_NEGW;
 }
 
-void gSPTransformVertex(float vtx[4], float mtx[4][4])
+static void gSPTransformVertex_default(float vtx[4], float mtx[4][4])
 {
     float x, y, z, w;
     x = vtx[0];
@@ -454,7 +448,7 @@ void gSPTransformVertex(float vtx[4], float mtx[4][4])
     vtx[3] = x * mtx[0][3] + y * mtx[1][3] + z * mtx[2][3] + mtx[3][3];
 }
 
-void gSPLightVertex(u32 v)
+static void gSPLightVertex_default(u32 v)
 {
     TransformVectorNormalize( &OGL.triangles.vertices[v].nx, gSP.matrix.modelView[gSP.matrix.modelViewi] );
 
@@ -475,6 +469,13 @@ void gSPLightVertex(u32 v)
     OGL.triangles.vertices[v].b = min(1.0, b);
 }
 
+static void gSPBillboardVertex_default(u32 v, u32 i)
+{
+    OGL.triangles.vertices[v].x += OGL.triangles.vertices[i].x;
+    OGL.triangles.vertices[v].y += OGL.triangles.vertices[i].y;
+    OGL.triangles.vertices[v].z += OGL.triangles.vertices[i].z;
+    OGL.triangles.vertices[v].w += OGL.triangles.vertices[i].w;
+}
 
 void gSPCombineMatrices()
 {
@@ -490,11 +491,7 @@ void gSPProcessVertex( u32 v )
     if (gSP.changed & CHANGED_MATRIX)
         gSPCombineMatrices();
 
-#if __NEON_OPT
-    gSPTransformVertexNEON( &OGL.triangles.vertices[v].x, gSP.matrix.combined );
-#else
     gSPTransformVertex( &OGL.triangles.vertices[v].x, gSP.matrix.combined );
-#endif
 
     if (config.screen.flipVertical)
     {
@@ -513,21 +510,7 @@ void gSPProcessVertex( u32 v )
         i = OGL.triangles.indexmap[0];
 #endif
 
-#if __NEON_OPT
-        asm volatile (
-        "vld1.32 		{d2, d3}, [%0]			\n\t"	//q1={x0,y0, z0, w0}
-        "vld1.32 		{d4, d5}, [%1]			\n\t"	//q2={x1,y1, z1, w1}
-        "vadd.f32 		q1, q1, q2 			    \n\t"	//q1=q1+q1
-        "vst1.32 		{d2, d3}, [%0] 		    \n\t"	//
-        :: "r"(&OGL.triangles.vertices[v].x), "r"(&OGL.triangles.vertices[i].x)
-        : "d2", "d3", "d4", "d5", "memory"
-        );
-#else
-        OGL.triangles.vertices[v].x += OGL.triangles.vertices[i].x;
-        OGL.triangles.vertices[v].y += OGL.triangles.vertices[i].y;
-        OGL.triangles.vertices[v].z += OGL.triangles.vertices[i].z;
-        OGL.triangles.vertices[v].w += OGL.triangles.vertices[i].w;
-#endif
+        gSPBillboardVertex(v, i);
     }
 
     if (!(gSP.geometryMode & G_ZBUFFER))
@@ -542,11 +525,7 @@ void gSPProcessVertex( u32 v )
     {
         if (config.enableLighting)
         {
-#if __NEON_OPT
-            gSPLightVertexNEON(v);
-#else
             gSPLightVertex(v);
-#endif
         }
         else
         {
@@ -634,7 +613,7 @@ void gSPMatrix( u32 matrix, u8 param )
         if (param & G_MTX_LOAD)
             CopyMatrix( gSP.matrix.projection, mtx );
         else
-            MultMatrix( gSP.matrix.projection, mtx );
+            MultMatrix2( gSP.matrix.projection, mtx );
     }
     else
     {
@@ -646,7 +625,7 @@ void gSPMatrix( u32 matrix, u8 param )
         if (param & G_MTX_LOAD)
             CopyMatrix( gSP.matrix.modelView[gSP.matrix.modelViewi], mtx );
         else
-            MultMatrix( gSP.matrix.modelView[gSP.matrix.modelViewi], mtx );
+            MultMatrix2( gSP.matrix.modelView[gSP.matrix.modelViewi], mtx );
     }
 
     gSP.changed |= CHANGED_MATRIX;
@@ -1740,4 +1719,18 @@ void gSPObjMatrix( u32 mtx )
 void gSPObjSubMatrix( u32 mtx )
 {
 }
+
+
+#ifdef __VEC4_OPT
+void (*gSPTransformVertex4)(u32 v, float mtx[4][4]) =
+        gSPTransformVertex4_default;
+void (*gSPTransformNormal4)(u32 v, float mtx[4][4]) =
+        gSPTransformNormal4_default;
+void (*gSPLightVertex4)(u32 v) = gSPLightVertex4_default;
+void (*gSPBillboardVertex4)(u32 v) = gSPBillboardVertex4_default;
+#endif
+void (*gSPTransformVertex)(float vtx[4], float mtx[4][4]) =
+        gSPTransformVertex_default;
+void (*gSPLightVertex)(u32 v) = gSPLightVertex_default;
+void (*gSPBillboardVertex)(u32 v, u32 i) = gSPBillboardVertex_default;
 

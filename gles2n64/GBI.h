@@ -751,13 +751,16 @@ struct GBIInfo
     u32 PCStackSize, numMicrocodes;
     MicrocodeInfo *current, *top, *bottom;
 
+#ifdef PROFILE_GBI
     unsigned int profileTimer[256 * 12];
     unsigned int profileNum[256 * 12];
     unsigned int profileTmp;
+#endif
 };
 
 extern GBIInfo GBI;
 
+#ifdef PROFILE_GBI
 void GBI_ProfileReset();
 void GBI_ProfileInit();
 void GBI_ProfileBegin(u32 cmd);
@@ -765,6 +768,7 @@ void GBI_ProfileEnd(u32 cmd);
 u32  GBI_ProfilePrint(FILE *file);
 const char* GBI_GetFuncName(u32 ucode, u32 cmd);
 u32  GBI_GetFuncTime(u32 ucode, u32 cmd);
+#endif
 
 void GBI_MakeCurrent( MicrocodeInfo *current );
 MicrocodeInfo *GBI_DetectMicrocode( u32 uc_start, u32 uc_dstart, u16 uc_dsize );

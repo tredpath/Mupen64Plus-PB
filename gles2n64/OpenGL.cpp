@@ -5,10 +5,19 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#include <SDL.h>
-//#include <PDL.h>
+
+//// paulscode, added for SDL linkage:
+#ifdef USE_SDL
+    #include <SDL.h>
+     // TODO: Remove this bandaid for SDL 2.0 compatibility (needed for SDL_SetVideoMode)
+    #if SDL_VERSION_ATLEAST(2,0,0)
+    #include "sdl2_compat.h" // Slightly hacked version of core/vidext_sdl2_compat.h
+    #endif
+#endif
+////
+#ifdef __QNXNTO__
+#include "bbutil.h"
+#endif
 
 #include "Common.h"
 #include "gles2N64.h"
@@ -22,16 +31,17 @@
 #include "VI.h"
 #include "RSP.h"
 #include "Config.h"
+#include "ticks.h"
 
-#include "../bbutil/bbutil.h"
+#include "FrameSkipper.h"
 
+#ifdef ANDROID_EDITION
+#include "ae_imports.h"
+#endif
 
-//#include "../mupen64plus-ui-console/ui-sdl.h"
-//#define BATCH_TEST
-//#define TEXTURECACHE_TEST
-//#define RENDERSTATE_TEST
-//#define SHADER_TEST
-
+//// paulscode, function prototype missing from Yongzh's code
+void OGL_UpdateDepthUpdate();
+////
 
 #ifdef TEXTURECACHE_TEST
 int     TextureCacheTime = 0;
@@ -51,12 +61,11 @@ int     TotalDrawTime = 0;
 int     TotalTriangles = 0;
 int     TotalDrawCalls = 0;
 #define glDrawElements(A,B,C,D) \
-    TotalTriangles += B; TotalDrawCalls++; int t = SDL_GetTicks(); glDrawElements(A,B,C,D); TotalDrawTime += (SDL_GetTicks() - t);
+    TotalTriangles += B; TotalDrawCalls++; int t = ticksGetTicks(); glDrawElements(A,B,C,D); TotalDrawTime += (ticksGetTicks() - t);
 #define glDrawArrays(A,B,C) \
-    TotalTriangles += C; TotalDrawCalls++; int t = SDL_GetTicks(); glDrawArrays(A,B,C); TotalDrawTime += (SDL_GetTicks() - t);
+    TotalTriangles += C; TotalDrawCalls++; int t = ticksGetTicks(); glDrawArrays(A,B,C); TotalDrawTime += (ticksGetTicks() - t);
 
 #endif
-
 
 GLInfo OGL;
 
@@ -131,59 +140,84 @@ void OGL_InitStates()
 {
     GLint   success;
 
-    glEnable(GL_CULL_FACE);
-    glEnableVertexAttribArray(SC_POSITION);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_ALWAYS);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_SCISSOR_TEST);
-    //glDepthRangef(1.0f, 0.0f);
+    glEnable( GL_CULL_FACE );
+    glEnableVertexAttribArray( SC_POSITION );
+    glEnable( GL_DEPTH_TEST );
+    glDepthFunc( GL_ALWAYS );
+    glDepthMask( GL_FALSE );
+    glEnable( GL_SCISSOR_TEST );
+
+///// paulscode, fixes missing graphics on Qualcomm, Adreno:
+    glDepthRangef(0.0f, 1.0f);
+/*
+    // default values (only seem to work on OMAP!)
+    glPolygonOffset(0.2f, 0.2f);
+*/
+    //// paulscode, added for different configurations based on hardware
+    // (part of the missing shadows and stars bug fix)
+#ifdef ANDROID_EDITION
+    int hardwareType = Android_JNI_GetHardwareType();
+    float f1, f2;
+    Android_JNI_GetPolygonOffset(hardwareType, 1, &f1, &f2);
+    glPolygonOffset( f1, f2 );
+#elif defined(__QNXNTO__)
+    float f1 = -1.0f;
+	float f2 = -1.0f;
+    glPolygonOffset( f1, f2 );
+#endif
+    ////
+
+// some other settings that have been tried, which do not work:
+    //glDepthRangef(1.0f, 0.0f);  // reverses depth-order on OMAP3 chipsets
     //glPolygonOffset(-0.2f, -0.2f);
-    glDepthRangef(0.09f, 1.0f);
-    glPolygonOffset(-0.2f, 0.2f);
-//    glDepthRangef(0.00f, (float)0x7FFF);
-//    glPolygonOffset(0.2f, 0.2f);
+    //glDepthRangef( 0.09f, (float)0x7FFF );  // should work, but not on Adreno
+    //glPolygonOffset( -0.2f, 0.2f );
+    //glDepthRangef(0.0f, (float)0x7FFF);  // what Yongzh used, broken on Adreno
+    //glPolygonOffset(0.2f, 0.2f);
+/////
+    
+
     glViewport(config.framebuffer.xpos, config.framebuffer.ypos, config.framebuffer.width, config.framebuffer.height);
 
     //create default shader program
-    LOG(LOG_VERBOSE, "Generate Default Shader Program.\n");
+    LOG( LOG_VERBOSE, "Generate Default Shader Program.\n" );
 
     const char *src[1];
     src[0] = _default_fsh;
-    OGL.defaultFragShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(OGL.defaultFragShader, 1, (const char**) src, NULL);
-    glCompileShader(OGL.defaultFragShader);
-    glGetShaderiv(OGL.defaultFragShader, GL_COMPILE_STATUS, &success);
+    OGL.defaultFragShader = glCreateShader( GL_FRAGMENT_SHADER );
+    glShaderSource( OGL.defaultFragShader, 1, (const char**) src, NULL );
+    glCompileShader( OGL.defaultFragShader );
+    glGetShaderiv( OGL.defaultFragShader, GL_COMPILE_STATUS, &success );
     if (!success)
     {
         LOG(LOG_ERROR, "Failed to produce default fragment shader.\n");
     }
 
     src[0] = _default_vsh;
-    OGL.defaultVertShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(OGL.defaultVertShader, 1, (const char**) src, NULL);
-    glCompileShader(OGL.defaultVertShader);
-    glGetShaderiv(OGL.defaultVertShader, GL_COMPILE_STATUS, &success);
-    if (!success)
+    OGL.defaultVertShader = glCreateShader( GL_VERTEX_SHADER );
+    glShaderSource( OGL.defaultVertShader, 1, (const char**) src, NULL );
+    glCompileShader( OGL.defaultVertShader );
+    glGetShaderiv( OGL.defaultVertShader, GL_COMPILE_STATUS, &success );
+    if( !success )
     {
-        LOG(LOG_ERROR, "Failed to produce default vertex shader.\n");
-        _glcompiler_error(OGL.defaultVertShader);
+        LOG( LOG_ERROR, "Failed to produce default vertex shader.\n" );
+        _glcompiler_error( OGL.defaultVertShader );
     }
 
     OGL.defaultProgram = glCreateProgram();
-    glBindAttribLocation(OGL.defaultProgram, 0, "aPosition");
-    glBindAttribLocation(OGL.defaultProgram, 1, "aTexCoord");
-    glAttachShader(OGL.defaultProgram, OGL.defaultFragShader);
-    glAttachShader(OGL.defaultProgram, OGL.defaultVertShader);
-    glLinkProgram(OGL.defaultProgram);
-    glGetProgramiv(OGL.defaultProgram, GL_LINK_STATUS, &success);
-    if (!success)
+    glBindAttribLocation( OGL.defaultProgram, 0, "aPosition" );
+    glBindAttribLocation( OGL.defaultProgram, 1, "aTexCoord" );
+    glAttachShader( OGL.defaultProgram, OGL.defaultFragShader );
+    glAttachShader( OGL.defaultProgram, OGL.defaultVertShader );
+    glLinkProgram( OGL.defaultProgram );
+    glGetProgramiv( OGL.defaultProgram, GL_LINK_STATUS, &success );
+    if( !success )
     {
-        LOG(LOG_ERROR, "Failed to link default program.\n");
-        _glcompiler_error(OGL.defaultFragShader);
+        LOG( LOG_ERROR, "Failed to link default program.\n" );
+        _glcompiler_error( OGL.defaultFragShader );
     }
-    glUniform1i(glGetUniformLocation(OGL.defaultProgram, "uTex"), 0);
-    glUseProgram(OGL.defaultProgram);
+    glUniform1i( glGetUniformLocation( OGL.defaultProgram, "uTex" ), 0 );
+    glUseProgram( OGL.defaultProgram );
 
 }
 
@@ -195,61 +229,126 @@ void OGL_UpdateScale()
 
 void OGL_ResizeWindow(int x, int y, int width, int height)
 {
-    //hmmm
+    config.window.xpos = x;
+    config.window.ypos = y;
+    config.window.width = width;
+    config.window.height = height;
+
+    config.framebuffer.xpos = x;
+    config.framebuffer.ypos = y;
+    config.framebuffer.width = width;
+    config.framebuffer.height = height;
+    OGL_UpdateScale();
+
+    glViewport(config.framebuffer.xpos, config.framebuffer.ypos,
+            config.framebuffer.width, config.framebuffer.height);
 }
 
-
+////// paulscode, added for SDL linkage
+#ifdef USE_SDL
 bool OGL_SDL_Start()
 {
-    const SDL_VideoInfo *videoInfo;
+    /* Initialize SDL */
+    LOG(LOG_MINIMAL, "Initializing SDL video subsystem...\n" );
+    if (SDL_InitSubSystem( SDL_INIT_VIDEO ) == -1)
+    {
+         LOG(LOG_ERROR, "Error initializing SDL video subsystem: %s\n", SDL_GetError() );
+        //return FALSE;
+    }
 
-	glViewport(config.framebuffer.xpos, config.framebuffer.ypos,
-			config.framebuffer.width, config.framebuffer.height);
+    int current_w = config.window.width;
+    int current_h = config.window.height;
+
+    /* Set the video mode */
+    LOG(LOG_MINIMAL, "Setting video mode %dx%d...\n", current_w, current_h );
+
+    // TODO: I should actually check what the pixelformat is, rather than assuming 16 bpp (RGB_565) or 32 bpp (RGBA_8888):
+    int bitsPP = 16;
+
+    // TODO: Replace SDL_SetVideoMode with something that is SDL 2.0 compatible
+    //       Better yet, eliminate all SDL calls by using the Mupen64Plus core api
+    if (!(OGL.hScreen = SDL_SetVideoMode( current_w, current_h, bitsPP, SDL_HWSURFACE )))
+    {
+        LOG(LOG_ERROR, "Problem setting videomode %dx%d: %s\n", current_w, current_h, SDL_GetError() );
+        //SDL_QuitSubSystem( SDL_INIT_VIDEO );
+        //return FALSE;
+    }
+
+//// paulscode, fixes the screen-size problem
+    const float ratio = ( config.romPAL ? 9.0f/11.0f : 0.75f );
+    int videoWidth = current_w;
+    int videoHeight = current_h;
+    int x = 0;
+    int y = 0;
+    
+    //re-scale width and height on per-rom basis
+    float width = (float)videoWidth * (float)config.window.refwidth / 800.f;
+    float height = (float)videoHeight * (float)config.window.refheight / 480.f;
+    
+    //re-center video if it was re-scaled per-rom
+    x -= (width - (float)videoWidth) / 2.f;
+    y -= (height - (float)videoHeight) / 2.f;
+    
+    //set xpos and ypos
+    config.window.xpos = x;
+    config.window.ypos = y;
+    config.framebuffer.xpos = x;
+    config.framebuffer.ypos = y;
+    
+    //set width and height
+    config.window.width = (int)width;
+    config.window.height = (int)height;
+    config.framebuffer.width = (int)width;
+    config.framebuffer.height = (int)height;
+////
+    return true;
 }
+#endif
+//////
+
 
 bool OGL_Start()
 {
-
-//    SDL_Init(SDL_INIT_VIDEO);
-//    PDL_Init(0);
+	printf("gles2n64> OGL_Start\n");fflush(stdout);
+// paulscode, initialize SDL
+#ifdef USE_SDL
+    if (!OGL_SDL_Start())
+	{
+		printf("gles2n64> OGL_Start quit\n");fflush(stdout);
+        return false;
+	}
+#endif
 //
-//    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-//    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1 );
-//    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,16);
-//    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,0);
-//    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE,0);
-//
-//    SDL_SetVideoMode(0, 0, 0, SDL_OPENGL);
-//
-//
-//    int sdlDouble,glDouble,sdlDepth,glDepth;
-//
-//    SDL_GL_GetAttribute(SDL_GL_DOUBLEBUFFER,&sdlDouble);
-//    SDL_GL_GetAttribute(SDL_GL_DEPTH_SIZE,&sdlDepth);
-//    glGetIntegerv(GL_DEPTH_BITS,&glDepth);
-//
-//    LOG(LOG_WARNING,"Double buffer sdl %i, Depth Size sdl %i gl %i",sdlDouble,sdlDepth,glDepth);
+	printf("gles2n64> OGL_Start end\n");fflush(stdout);
 
     OGL_InitStates();
 
-
-    //clear back buffer:
-    glViewport(0, 0, config.window.width, config.window.height);
-    glClearDepthf(1.0f);
-    glClearColor(0,0,0,0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#ifdef USE_SDL
+/////// paulscode, graphics bug-fixes
+    float depth = gDP.fillColor.z ;
+    glDisable( GL_SCISSOR_TEST );
+    glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+//    glClearDepthf( depth );  // broken on Qualcomm Adreno
+    glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+    glClearColor( 0, 0, 0, 1 );
+    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
     glFinish();
-    //OGL_SwapBuffers();
-    //SDL_GL_SwapBuffers();
-    PB_eglSwapBuffers();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+#ifdef ANDROID_EDITION
+    Android_JNI_SwapWindow();  // paulscode, fix for black-screen bug
+#elif defined(__QNXNTO__)
+	PB_eglSwapBuffers();
+#endif
+    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
     glFinish();
+    OGL_UpdateDepthUpdate();
+    glEnable( GL_SCISSOR_TEST );
+////////
+#endif
 
     //create framebuffer
     if (config.framebuffer.enable)
     {
         LOG(LOG_VERBOSE, "Create offscreen framebuffer. \n");
-
         if (config.framebuffer.width == config.window.width && config.framebuffer.height == config.window.height)
         {
             LOG(LOG_WARNING, "There's no point in using a offscreen framebuffer when the window and screen dimensions are the same\n");
@@ -261,7 +360,7 @@ bool OGL_Start()
         glBindRenderbuffer(GL_RENDERBUFFER, OGL.framebuffer.depth_buffer);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24_OES, config.framebuffer.width, config.framebuffer.height);
         glBindTexture(GL_TEXTURE_2D, OGL.framebuffer.color_buffer);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, config.framebuffer.width, config.framebuffer.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, config.framebuffer.width, config.framebuffer.height, 0, GL_RGB, GL_UNSIGNED_SHORT_5_6_5, NULL);
         glBindFramebuffer(GL_FRAMEBUFFER, OGL.framebuffer.fb);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, OGL.framebuffer.color_buffer, 0);
         glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, OGL.framebuffer.depth_buffer);
@@ -279,8 +378,6 @@ bool OGL_Start()
                     printf("Framebuffer Unsupported. \n"); break;
                 case GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
                     printf("Incomplete Dimensions. \n"); break;
-//                case GL_FRAMEBUFFER_INCOMPLETE_FORMATS:
-//                    printf("Incomplete Formats. \n"); break;
             }
             config.framebuffer.enable = 0;
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -295,7 +392,7 @@ bool OGL_Start()
     }
 
     float f = 0;
-    //glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &f);
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &f);
     if (config.texture.maxAnisotropy > ((int)f))
     {
         LOG(LOG_WARNING, "Clamping max anistropy to %ix.\n", (int)f);
@@ -304,7 +401,7 @@ bool OGL_Start()
 
     //Print some info
     LOG(LOG_VERBOSE, "Width: %i Height:%i \n", config.framebuffer.width, config.framebuffer.height);
-    LOG(LOG_VERBOSE, "[gles2n64]: Enable Runfast... \n");
+    LOG(LOG_VERBOSE, "[gln64]: Enable Runfast... \n");
 
     OGL_EnableRunfast();
     OGL_UpdateScale();
@@ -340,7 +437,9 @@ void OGL_Stop()
 {
     LOG(LOG_MINIMAL, "Stopping OpenGL\n");
 
+#ifdef USE_SDL
     SDL_QuitSubSystem( SDL_INIT_VIDEO );
+#endif
 
     if (config.framebuffer.enable)
     {
@@ -472,13 +571,9 @@ void OGL_SetBlendMode()
 
                 default:
                     if (blendmode_2 == (BLEND_PASS>>2))
-                    {
                         glDisable(GL_BLEND);
-                    }
                     else
-                    {
                         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                    }
                     break;
                 }
                 break;
@@ -558,13 +653,9 @@ void OGL_UpdateStates()
         OGL_UpdateCullFace();
 
         if (gSP.geometryMode & G_ZBUFFER)
-        {
             glEnable(GL_DEPTH_TEST);
-        }
         else
-        {
             glDisable(GL_DEPTH_TEST);
-        }
 
     }
 
@@ -583,13 +674,9 @@ void OGL_UpdateStates()
             glDepthMask((gDP.otherMode.depthUpdate) ? GL_TRUE : GL_FALSE);
 
             if (gDP.otherMode.depthMode == ZMODE_DEC)
-            {
                 glEnable(GL_POLYGON_OFFSET_FILL);
-            }
            else
-           {
                 glDisable(GL_POLYGON_OFFSET_FILL);
-           }
         }
         else
         {
@@ -627,9 +714,9 @@ void OGL_UpdateStates()
             if (scProgramCurrent->usesT0)
             {
 #ifdef TEXTURECACHE_TEST
-                unsigned t = SDL_GetTicks();
+                unsigned t = ticksGetTicks();
                 TextureCache_Update(0);
-                TextureCacheTime += (SDL_GetTicks() - t);
+                TextureCacheTime += (ticksGetTicks() - t);
 #else
                 TextureCache_Update(0);
 #endif
@@ -645,9 +732,9 @@ void OGL_UpdateStates()
             if (scProgramCurrent->usesT1)
             {
 #ifdef TEXTURECACHE_TEST
-                unsigned t = SDL_GetTicks();
+                unsigned t = ticksGetTicks();
                 TextureCache_Update(1);
-                TextureCacheTime += (SDL_GetTicks() - t);
+                TextureCacheTime += (ticksGetTicks() - t);
 #else
                 TextureCache_Update(1);
 #endif
@@ -768,53 +855,49 @@ void OGL_SetTexCoordArrays()
 
 void OGL_DrawTriangles()
 {
-	//static int BADBATCHING = 0;
-	if (OGL.renderingToTexture && config.ignoreOffscreenRendering)
-	{
-		OGL.triangles.num = 0;
-		return;
-	}
+    if (OGL.renderingToTexture && config.ignoreOffscreenRendering)
+    {
+        OGL.triangles.num = 0;
+        return;
+    }
 
-	if (OGL.triangles.num == 0) return;
+    if (OGL.triangles.num == 0) return;
 
-	if ((config.updateMode == SCREEN_UPDATE_AT_1ST_PRIMITIVE) && OGL.screenUpdate)
-		OGL_SwapBuffers();
+    if ((config.updateMode == SCREEN_UPDATE_AT_1ST_PRIMITIVE) && OGL.screenUpdate)
+        OGL_SwapBuffers();
 
-	if (gSP.changed || gDP.changed)
-		OGL_UpdateStates();
+    if (gSP.changed || gDP.changed)
+        OGL_UpdateStates();
 
-	if (OGL.renderState != RS_TRIANGLE || scProgramChanged)
-	{
-		OGL_SetColorArray();
-		OGL_SetTexCoordArrays();
-		glDisableVertexAttribArray(SC_TEXCOORD1);
-		SC_ForceUniform1f(uRenderState, RS_TRIANGLE);
-	}
+    if (OGL.renderState != RS_TRIANGLE || scProgramChanged)
+    {
+        OGL_SetColorArray();
+        OGL_SetTexCoordArrays();
+        glDisableVertexAttribArray(SC_TEXCOORD1);
+        SC_ForceUniform1f(uRenderState, RS_TRIANGLE);
+    }
 
-	if (OGL.renderState != RS_TRIANGLE)
-	{
+    if (OGL.renderState != RS_TRIANGLE)
+    {
 #ifdef RENDERSTATE_TEST
-		StateChanges++;
+        StateChanges++;
 #endif
-		glVertexAttribPointer(SC_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].x);
-		glVertexAttribPointer(SC_COLOR, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].r);
-		glVertexAttribPointer(SC_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].s);
+        glVertexAttribPointer(SC_POSITION, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].x);
+        glVertexAttribPointer(SC_COLOR, 4, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].r);
+        glVertexAttribPointer(SC_TEXCOORD0, 2, GL_FLOAT, GL_FALSE, sizeof(SPVertex), &OGL.triangles.vertices[0].s);
 
-		OGL_UpdateCullFace();
-		OGL_UpdateViewport();
-		glEnable(GL_SCISSOR_TEST);
-		OGL.renderState = RS_TRIANGLE;
-	}
+        OGL_UpdateCullFace();
+        OGL_UpdateViewport();
+        glEnable(GL_SCISSOR_TEST);
+        OGL.renderState = RS_TRIANGLE;
+    }
 
-	//if(BADBATCHING++ % 10 == 0)
-	//{
-	glDrawElements(GL_TRIANGLES, OGL.triangles.num, GL_UNSIGNED_BYTE, OGL.triangles.elements);
-	OGL.triangles.num = 0;
+    glDrawElements(GL_TRIANGLES, OGL.triangles.num, GL_UNSIGNED_BYTE, OGL.triangles.elements);
+    OGL.triangles.num = 0;
 
 #ifdef __TRIBUFFER_OPT
-	__indexmap_clear();
+    __indexmap_clear();
 #endif
-	//}
 }
 
 void OGL_DrawLine(int v0, int v1, float width )
@@ -853,7 +936,7 @@ void OGL_DrawLine(int v0, int v1, float width )
 
 void OGL_DrawRect( int ulx, int uly, int lrx, int lry, float *color)
 {
-	if (OGL.renderingToTexture && config.ignoreOffscreenRendering) return;
+    if (OGL.renderingToTexture && config.ignoreOffscreenRendering) return;
 
     if ((config.updateMode == SCREEN_UPDATE_AT_1ST_PRIMITIVE) && OGL.screenUpdate)
         OGL_SwapBuffers();
@@ -1056,15 +1139,19 @@ void OGL_ClearDepthBuffer()
     if ((config.updateMode == SCREEN_UPDATE_AT_1ST_PRIMITIVE) && OGL.screenUpdate)
         OGL_SwapBuffers();
 
-    //float depth = 1.0 - (gDP.fillColor.z / ((float)0x3FFF));
+    //float depth = 1.0 - (gDP.fillColor.z / ((float)0x3FFF)); // broken on OMAP3
     float depth = gDP.fillColor.z ;
 
+/////// paulscode, graphics bug-fixes
     glDisable( GL_SCISSOR_TEST );
-    glDepthMask(GL_TRUE );
-    glClearDepthf(depth);
+    glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+//    glClearDepthf( depth );  // broken on Qualcomm Adreno
+    glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+    glClearColor( 0, 0, 0, 1 );
     glClear( GL_DEPTH_BUFFER_BIT );
     OGL_UpdateDepthUpdate();
     glEnable( GL_SCISSOR_TEST );
+////////
 }
 
 void OGL_ClearColorBuffer( float *color )
@@ -1102,7 +1189,7 @@ int OGL_CheckError()
 
 void OGL_UpdateFrameTime()
 {
-    unsigned ticks = SDL_GetTicks();
+    unsigned ticks = ticksGetTicks();
     static unsigned lastFrameTicks = 0;
     for(int i = OGL_FRAMETIME_NUM-1; i > 0; i--) OGL.frameTime[i] = OGL.frameTime[i-1];
     OGL.frameTime[0] = ticks - lastFrameTicks;
@@ -1113,9 +1200,10 @@ void OGL_SwapBuffers()
 {
     //OGL_DrawTriangles();
     scProgramChanged = 0;
+#if 0
     static int frames = 0;
     static unsigned lastTicks = 0;
-    unsigned ticks = SDL_GetTicks();
+    unsigned ticks = ticksGetTicks();
 
     frames++;
     if (ticks >= (lastTicks + 1000))
@@ -1152,10 +1240,11 @@ void OGL_SwapBuffers()
         frames = 0;
         lastTicks = ticks;
     }
+#endif
 
 
 #ifdef PROFILE_GBI
-    u32 profileTicks = SDL_GetTicks();
+    u32 profileTicks = ticksGetTicks();
     static u32 profileLastTicks = 0;
     if (profileTicks >= (profileLastTicks + 5000))
     {
@@ -1177,8 +1266,8 @@ void OGL_SwapBuffers()
     if (config.framebuffer.enable)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClearColor(0,0,0,1);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor( 0, 0, 0, 1 );
+        glClear( GL_COLOR_BUFFER_BIT );
 
         glUseProgram(OGL.defaultProgram);
         glDisable(GL_SCISSOR_TEST);
@@ -1212,8 +1301,11 @@ void OGL_SwapBuffers()
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (float*)vert + 2);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-        //SDL_GL_SwapBuffers();
+#ifdef ANDROID_EDITION
+        Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
+#elif defined(__QNXNTO__)
         PB_eglSwapBuffers();
+#endif
 
 
         glBindFramebuffer(GL_FRAMEBUFFER, OGL.framebuffer.fb);
@@ -1223,22 +1315,32 @@ void OGL_SwapBuffers()
     }
     else
     {
-    	//SDL_GL_SwapBuffers();
-    	PB_eglSwapBuffers();
+#ifdef ANDROID_EDITION
+        Android_JNI_SwapWindow(); // paulscode, fix for black-screen bug
+#elif defined(__QNXNTO__)
+        PB_eglSwapBuffers();
+#endif
     }
+
+    // if emulator defined a render callback function, call it before
+	// buffer swap
+    if (renderCallback) (*renderCallback)();
 
     OGL.screenUpdate = false;
 
     if (config.forceBufferClear)
     {
-    	//glDepthMask(1);
-        glClearDepthf(1.0f);
-        glClearColor(0,0,0,1);
-
-        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-        //OGL_UpdateDepthUpdate();
-        //OGL_UpdateViewport();
-
+/////// paulscode, graphics bug-fixes
+    float depth = gDP.fillColor.z ;
+    glDisable( GL_SCISSOR_TEST );
+    glDepthMask( GL_TRUE );  // fixes side-bar graphics glitches
+//    glClearDepthf( depth );  // broken on Qualcomm Adreno
+    glClearDepthf( 1.0f );  // fixes missing graphics on Qualcomm Adreno
+    glClearColor( 0, 0, 0, 1 );
+    glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT );
+    OGL_UpdateDepthUpdate();
+    glEnable( GL_SCISSOR_TEST );
+///////
     }
 
 }
@@ -1253,8 +1355,8 @@ void OGL_ReadScreen( void *dest, int *width, int *height )
     if (dest == NULL)
         return;
 
-    glReadPixels(config.framebuffer.xpos, config.framebuffer.ypos,
+    glReadPixels( config.framebuffer.xpos, config.framebuffer.ypos,
             config.framebuffer.width, config.framebuffer.height,
-            GL_RGBA, GL_UNSIGNED_BYTE, dest);
+            GL_RGBA, GL_UNSIGNED_BYTE, dest );
 }
 

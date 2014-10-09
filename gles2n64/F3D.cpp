@@ -10,6 +10,8 @@
 #include "OpenGL.h"
 #include "DepthBuffer.h"
 
+#include "Config.h"
+
 void F3D_SPNoOp( u32 w0, u32 w1 )
 {
     gSPNoOp();

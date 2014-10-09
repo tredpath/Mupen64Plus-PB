@@ -10,7 +10,6 @@
 #include "Debug.h"
 #include "Config.h"
 
-
 VIInfo VI;
 
 void VI_UpdateSize()

@@ -1,7 +1,6 @@
+
 #include <dlfcn.h>
 #include <string.h>
-//#include <SDL.h>
-//#include <cpu-features.h>
 
 #include "m64p_types.h"
 #include "m64p_plugin.h"
@@ -17,14 +16,21 @@
 #include "Textures.h"
 #include "ShaderCombiner.h"
 #include "3DMath.h"
-#include "Common.h"
+#include "FrameSkipper.h"
+#include "ticks.h"
+
+#ifdef ANDROID_EDITION
+#include <cpu-features.h>
+#include "ae_imports.h"
+#endif
 
 ptr_ConfigGetSharedDataFilepath ConfigGetSharedDataFilepath = NULL;
+
+static FrameSkipper frameSkipper;
 
 u32         last_good_ucode = (u32) -1;
 void        (*CheckInterrupts)( void );
 void        (*renderCallback)() = NULL;
-
 
 extern "C" {
 
@@ -35,20 +41,21 @@ EXPORT m64p_error CALL PluginStartup(m64p_dynlib_handle CoreLibHandle,
             dlsym(CoreLibHandle, "ConfigGetSharedDataFilepath");
 
 #ifdef __NEON_OPT
-    //if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM &&
-     //       (android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON) != 0) {
-      //  MathInitNeon();
-       // gSPInitNeon();
-    //}
+#ifdef ANDROID_EDITION
+    if (android_getCpuFamily() == ANDROID_CPU_FAMILY_ARM &&
+            (android_getCpuFeatures() & ANDROID_CPU_ARM_FEATURE_NEON) != 0)
 #endif
-
-
-
+    {
+        MathInitNeon();
+        gSPInitNeon();
+    }
+#endif
     return M64ERR_SUCCESS;
 }
 
 EXPORT m64p_error CALL PluginShutdown(void)
 {
+    OGL_Stop();  // paulscode, OGL_Stop missing from Yongzh's code
 }
 
 EXPORT m64p_error CALL PluginGetVersion(m64p_plugin_type *PluginType,
@@ -120,6 +127,14 @@ EXPORT int CALL InitiateGFX (GFX_INFO Gfx_Info)
     Config_LoadConfig();
     Config_LoadRomConfig(Gfx_Info.HEADER);
 
+    ticksInitialize();
+    if( config.autoFrameSkip )
+        frameSkipper.setSkips( FrameSkipper::AUTO, config.maxFrameSkip );
+    else
+        frameSkipper.setSkips( FrameSkipper::MANUAL, config.maxFrameSkip );
+
+    OGL_Start();
+
     return 1;
 }
 
@@ -127,31 +142,17 @@ EXPORT void CALL ProcessDList(void)
 {
     OGL.frame_dl++;
 
-    if (config.autoFrameSkip)
-    {
-        OGL_UpdateFrameTime();
-
-        if (OGL.consecutiveSkips < 1)
-        {
-            unsigned t = 0;
-            for(int i = 0; i < OGL_FRAMETIME_NUM; i++) t += OGL.frameTime[i];
-            t *= config.targetFPS;
-            if (config.romPAL) t = (t * 5) / 6;
-            if (t > (OGL_FRAMETIME_NUM * 1000))
-            {
-                OGL.consecutiveSkips++;
-                OGL.frameSkipped++;
-                RSP.busy = FALSE;
-                RSP.DList++;
-                return;
-            }
-        }
-    }
-    else if ((OGL.frame_vsync % config.frameRenderRate) != 0)
+    if (frameSkipper.willSkipNext())
     {
         OGL.frameSkipped++;
         RSP.busy = FALSE;
         RSP.DList++;
+
+        /* avoid hang on frameskip */
+        *REG.MI_INTR |= MI_INTR_DP;
+        CheckInterrupts();
+        *REG.MI_INTR |= MI_INTR_SP;
+        CheckInterrupts();
         return;
     }
 
@@ -164,18 +165,29 @@ EXPORT void CALL ProcessRDPList(void)
 {
 }
 
+EXPORT void CALL ResizeVideoOutput(int Width, int Height)
+{
+}
+
 EXPORT void CALL RomClosed (void)
 {
 }
 
 EXPORT int CALL RomOpen (void)
 {
-    OGL_Start();
     RSP_Init();
     OGL.frame_vsync = 0;
     OGL.frame_dl = 0;
     OGL.frame_prevdl = -1;
     OGL.mustRenderDlist = false;
+
+    frameSkipper.setTargetFPS(config.romPAL ? 50 : 60);
+    return 1;
+}
+
+EXPORT void CALL RomResumed(void)
+{
+    frameSkipper.start();
 }
 
 EXPORT void CALL ShowCFB (void)
@@ -184,6 +196,8 @@ EXPORT void CALL ShowCFB (void)
 
 EXPORT void CALL UpdateScreen (void)
 {
+    frameSkipper.update();
+
     //has there been any display lists since last update
     if (OGL.frame_prevdl == OGL.frame_dl) return;
 
@@ -274,8 +288,10 @@ EXPORT void CALL FBGetFrameBufferInfo(void *p)
 {
 }
 
-EXPORT void CALL ReadScreen(void *dest, int *width, int *height)
+// paulscode, API changed this to "ReadScreen2" in Mupen64Plus 1.99.4
+EXPORT void CALL ReadScreen2(void *dest, int *width, int *height, int front)
 {
+/* TODO: 'int front' was added in 1.99.4.  What to do with this here? */
     OGL_ReadScreen(dest, width, height);
 }
 
@@ -284,7 +300,12 @@ EXPORT void CALL SetRenderingCallback(void (*callback)())
     renderCallback = callback;
 }
 
-
+EXPORT void CALL SetFrameSkipping(bool autoSkip, int maxSkips)
+{
+    frameSkipper.setSkips(
+            autoSkip ? FrameSkipper::AUTO : FrameSkipper::MANUAL,
+            maxSkips);
+}
 
 EXPORT void CALL SetStretchVideo(bool stretch)
 {

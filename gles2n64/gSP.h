@@ -13,32 +13,74 @@
 #define CHANGED_FOGPOSITION     0x20
 #define CHANGED_TEXTURESCALE    0x40
 
-
-#ifdef __TRIBUFFER_OPT
+//#ifdef __TRIBUFFER_OPT
+//    #define gSPFlushTriangles() \
+//    if \
+//    ( \
+//        (OGL.triangles.num > 1000) || \
+//        ( \
+//            (RSP.nextCmd != G_NOOP) && \
+//            (RSP.nextCmd != G_RDPNOOP) && \
+//            (RSP.nextCmd != G_MOVEMEM) && \
+//            (RSP.nextCmd != G_ENDDL) && \
+//            (RSP.nextCmd != G_DL) && \
+//            (RSP.nextCmd != G_VTXCOLORBASE) && \
+//            (RSP.nextCmd != G_TRI1) && \
+//            (RSP.nextCmd != G_TRI2) && \
+//            (RSP.nextCmd != G_TRI4) && \
+//            (RSP.nextCmd != G_QUAD) && \
+//            (RSP.nextCmd != G_VTX) && \
+//            (RSP.nextCmd != G_MTX) \
+//        ) \
+//    ) \
+//    { \
+//        OGL_DrawTriangles(); \
+//    }
+//#else
+//    #define gSPFlushTriangles() \
+//    if \
+//    ( \
+//        (RSP.nextCmd != G_TRI1) && \
+//        (RSP.nextCmd != G_TRI2) && \
+//        (RSP.nextCmd != G_TRI4) && \
+//        (RSP.nextCmd != G_QUAD) \
+//    ) \
+//    { \
+//        OGL_DrawTriangles(); \
+//    }
+//#endif
 #define gSPFlushTriangles() \
-    if ((OGL.triangles.num > 1000) || ( \
-        (RSP.nextCmd != G_NOOP) && \
-        (RSP.nextCmd != G_RDPNOOP) && \
-        (RSP.nextCmd != G_MOVEMEM) && \
-        (RSP.nextCmd != G_ENDDL) && \
-        (RSP.nextCmd != G_DL) && \
-        (RSP.nextCmd != G_VTXCOLORBASE) && \
+if \
+( \
+    ( \
+         (config.tribufferOpt) && \
+         (OGL.triangles.num > 1000) || \
+         ( \
+             (RSP.nextCmd != G_NOOP) && \
+             (RSP.nextCmd != G_RDPNOOP) && \
+             (RSP.nextCmd != G_MOVEMEM) && \
+             (RSP.nextCmd != G_ENDDL) && \
+             (RSP.nextCmd != G_DL) && \
+             (RSP.nextCmd != G_VTXCOLORBASE) && \
+             (RSP.nextCmd != G_TRI1) && \
+             (RSP.nextCmd != G_TRI2) && \
+             (RSP.nextCmd != G_TRI4) && \
+             (RSP.nextCmd != G_QUAD) && \
+             (RSP.nextCmd != G_VTX) && \
+             (RSP.nextCmd != G_MTX) \
+         ) \
+    ) || \
+    ( \
         (RSP.nextCmd != G_TRI1) && \
         (RSP.nextCmd != G_TRI2) && \
         (RSP.nextCmd != G_TRI4) && \
-        (RSP.nextCmd != G_QUAD) && \
-        (RSP.nextCmd != G_VTX) && \
-        (RSP.nextCmd != G_MTX))){ \
-        OGL_DrawTriangles(); \
-        }
-#else
-#define gSPFlushTriangles() \
-    if ((RSP.nextCmd != G_TRI1) && \
-        (RSP.nextCmd != G_TRI2) && \
-        (RSP.nextCmd != G_TRI4) && \
-        (RSP.nextCmd != G_QUAD))\
-        OGL_DrawTriangles()
-#endif
+        (RSP.nextCmd != G_QUAD) \
+    ) \
+) \
+{ \
+    OGL_DrawTriangles(); \
+}
+
 
 #define CLIP_X      0x03
 #define CLIP_NEGX   0x01
@@ -197,11 +239,25 @@ void gSP4Triangles(const s32 v00, const s32 v01, const s32 v02,
                     const s32 v30, const s32 v31, const s32 v32 );
 
 
-#ifdef __TRIBUFFER_OPT
+//#ifdef __TRIBUFFER_OPT
 void __indexmap_init();
 void __indexmap_clear();
 u32 __indexmap_findunused(u32 num);
 u32 __indexmap_getnew(u32 index, u32 num);
+//#endif
+
+#ifdef __VEC4_OPT
+extern void (*gSPTransformVertex4)(u32 v, float mtx[4][4]);
+extern void (*gSPTransformNormal4)(u32 v, float mtx[4][4]);
+extern void (*gSPLightVertex4)(u32 v);
+extern void (*gSPBillboardVertex4)(u32 v);
+#endif
+extern void (*gSPTransformVertex)(float vtx[4], float mtx[4][4]);
+extern void (*gSPLightVertex)(u32 v);
+extern void (*gSPBillboardVertex)(u32 v, u32 i);
+
+#ifdef __NEON_OPT
+void gSPInitNeon();
 #endif
 
 #endif

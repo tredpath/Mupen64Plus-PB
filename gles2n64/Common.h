@@ -9,7 +9,7 @@
 #define LOG_WARNING 3
 #define LOG_VERBOSE 4
 
-#define LOG_LEVEL LOG_ERROR
+#define LOG_LEVEL LOG_WARNING
 
 # ifndef min
 #  define min(a,b) ((a) < (b) ? (a) : (b))
@@ -20,6 +20,15 @@
 
 
 #if LOG_LEVEL>0
+#ifdef ANDROID_EDITION
+#include <android/log.h>
+
+#define LOG(A, ...) \
+    if (A <= LOG_LEVEL) \
+    { \
+        __android_log_print(ANDROID_LOG_DEBUG, "gln64", __VA_ARGS__); \
+    }
+#else
 #define LOG(A, ...) \
 	if (A <= LOG_LEVEL) \
 		{ \
@@ -28,7 +37,7 @@
 			printf(__VA_ARGS__); \
 			fflush(stdout); \
 		}
-
+#endif
 #else
 
 #define LOG(A, ...)

@@ -48,32 +48,28 @@ struct Option
 
 Option configOptions[] =
 {
-    {"#gles2n64 Graphics Plugin for N64", NULL, 0},
+    {"#gln64 Graphics Plugin for N64", NULL, 0},
     {"#by Orkin / glN64 developers and Adventus.", NULL, 0},
 
     {"config version", &config.version, 0},
     {"", NULL, 0},
 
-    {"#Screen Settings:", NULL, 0},
-    {"screen width", &config.screen.width, 1024},
-    {"screen height", &config.screen.height, 600},
-    {"", NULL, 0},
-
     {"#Window Settings:", NULL, 0},
-    {"window enable x11", &config.window.enableX11, 1},
-    {"window fullscreen", &config.window.fullscreen, 1},
-    {"window centre", &config.window.centre, 1},
     {"window xpos", &config.window.xpos, 0},
     {"window ypos", &config.window.ypos, 0},
     {"window width", &config.window.width, 1024},
     {"window height", &config.window.height, 600},
+    {"window refwidth", &config.window.refwidth, 800},
+    {"window refheight", &config.window.refheight, 480},
     {"", NULL, 0},
 
     {"#Framebuffer Settings:",NULL,0},
 //    {"framebuffer enable", &config.framebuffer.enable, 0},
     {"framebuffer bilinear", &config.framebuffer.bilinear, 0},
-    {"framebuffer width", &config.framebuffer.width, 1024},
-    {"framebuffer height", &config.framebuffer.height, 600},
+    {"framebuffer width", &config.framebuffer.width, 400},
+    {"framebuffer height", &config.framebuffer.height, 240},
+//    {"framebuffer width", &config.framebuffer.width, 800},
+//    {"framebuffer height", &config.framebuffer.height, 480},
     {"", NULL, 0},
 
     {"#VI Settings:", NULL, 0},
@@ -103,6 +99,7 @@ Option configOptions[] =
 
     {"#Frame skip:", NULL, 0},
     {"auto frameskip", &config.autoFrameSkip, 0},
+    {"max frameskip", &config.maxFrameSkip, 0},
     {"target FPS", &config.targetFPS, 20},
     {"frame render rate", &config.frameRenderRate, 1},
     {"vertical sync", &config.verticalSync, 0},
@@ -113,6 +110,10 @@ Option configOptions[] =
     {"ignore offscreen rendering", &config.ignoreOffscreenRendering, 0},
     {"force screen clear", &config.forceBufferClear, 0},
     {"flip vertical", &config.screen.flipVertical, 0},
+// paulscode: removed from pre-compile to a config option
+//// (part of the Galaxy S Zelda crash-fix
+    {"tribuffer opt", &config.tribufferOpt, 1},
+//
     {"", NULL, 0},
 
     {"#Hack Settings:", NULL, 0},
@@ -137,7 +138,7 @@ void Config_WriteConfig(const char *filename)
     for(int i=0; i<configOptionsSize; i++)
     {
         Option *o = &configOptions[i];
-        fprintf(f, o->name);
+        fprintf(f, "%s", o->name);
         if (o->data) fprintf(f,"=%i", *(o->data));
         fprintf(f, "\n");
     }
@@ -223,7 +224,7 @@ void Config_LoadRomConfig(unsigned char* header)
     }
     else
     {
-        LOG(LOG_MINIMAL, "[gles2N64]: Searching %s Database for \"%s\" ROM\n", filename, config.romName);
+        LOG(LOG_MINIMAL, "[gln64]: Searching %s Database for \"%s\" ROM\n", filename, config.romName);
         bool isRom = false;
         while (!feof(f))
         {
@@ -232,8 +233,11 @@ void Config_LoadRomConfig(unsigned char* header)
 
             if (strncmp(line,"rom name=", 9) == 0)
             {
-                char* v = strchr(line, '\n');
-                if (v) *v='\0';
+                //Depending on the editor, end lines could be terminated by "LF" or "CRLF"
+                char* lf = strchr(line, '\n'); //Line Feed
+                char* cr = strchr(line, '\r'); //Carriage Return
+                if (lf) *lf='\0';
+                if (cr) *cr='\0';
                 isRom = (strcasecmp(config.romName, line+9) == 0);
             }
             else
@@ -244,32 +248,35 @@ void Config_LoadRomConfig(unsigned char* header)
                     if (!val) continue;
                     *val++ = '\0';
                     Config_SetOption(line,val);
+                    LOG(LOG_MINIMAL, "%s = %s", line, val);
                 }
             }
         }
     }
+	
+    fclose(f);
 }
 
 void Config_LoadConfig()
 {
     FILE *f;
     char line[4096];
-
     // default configuration
     Config_SetDefault();
+
 
     // read configuration
     const char *filename = "shared/misc/n64/data/gles2n64.conf";
     f = fopen(filename, "r");
     if (!f)
     {
-        LOG(LOG_MINIMAL, "[gles2N64]: Couldn't open config file '%s' for reading: %s\n", filename, strerror( errno ) );
-        LOG(LOG_MINIMAL, "[gles2N64]: Attempting to write new Config \n");
+        LOG(LOG_MINIMAL, "[gln64]: Couldn't open config file '%s' for reading: %s\n", filename, strerror( errno ) );
+        LOG(LOG_MINIMAL, "[gln64]: Attempting to write new Config \n");
         Config_WriteConfig(filename);
     }
     else
     {
-        LOG(LOG_MINIMAL, "[gles2n64]: Loading Config from %s \n", filename);
+        LOG(LOG_MINIMAL, "[gln64]: Loading Config from %s \n", filename);
 
         while (!feof( f ))
         {
@@ -289,7 +296,7 @@ void Config_LoadConfig()
 
         if (config.version < CONFIG_VERSION)
         {
-            LOG(LOG_WARNING, "[gles2N64]: Wrong config version, rewriting config with defaults\n");
+            LOG(LOG_WARNING, "[gln64]: Wrong config version, rewriting config with defaults\n");
             Config_SetDefault();
             Config_WriteConfig(filename);
         }

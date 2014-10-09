@@ -1,8 +1,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <memory.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
+
 #ifndef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #endif
@@ -432,7 +431,7 @@ void TextureCache_Init()
 
 bool TextureCache_Verify()
 {
-    s16 i = 0;
+    u16 i = 0;
     CachedTexture *current;
 
     current = cache.top;
@@ -442,7 +441,7 @@ bool TextureCache_Verify()
         i++;
         current = current->lower;
     }
-    if ((unsigned short)i != cache.numCached) return false;
+    if (i != cache.numCached) return false;
 
     i = 0;
     current = cache.bottom;
@@ -451,7 +450,7 @@ bool TextureCache_Verify()
         i++;
         current = current->higher;
     }
-    if ((unsigned short)i != cache.numCached) return false;
+    if (i != cache.numCached) return false;
 
     return true;
 }
@@ -462,7 +461,7 @@ void TextureCache_RemoveBottom()
 
 #ifdef __HASHMAP_OPT
     CachedTexture* tex= cache.hash.find(cache.bottom->crc);
-    if (tex == cache.bottom);
+    if (tex == cache.bottom)
         cache.hash.insert(cache.bottom->crc, NULL);
 #endif
 
@@ -634,16 +633,16 @@ void TextureCache_LoadBackground( CachedTexture *texInfo )
             glType = GL_UNSIGNED_SHORT_4_4_4_4;
             bytePerPixel = 2;
             break;
-      case FORMAT_RGBA5551:
+        case FORMAT_RGBA5551:
             glFormat = GL_RGBA;
             glType = GL_UNSIGNED_SHORT_5_5_5_1;
             bytePerPixel = 2;
             break;
-		case FORMAT_RGBA8888:
-			glFormat = GL_RGBA;
-			glType = GL_UNSIGNED_BYTE;
-			bytePerPixel = 4;
-			break;
+        case FORMAT_RGBA8888:
+            glFormat = GL_RGBA;
+            glType = GL_UNSIGNED_BYTE;
+            bytePerPixel = 4;
+            break;
     }
 
     glWidth = texInfo->realWidth;
@@ -712,14 +711,8 @@ void TextureCache_LoadBackground( CachedTexture *texInfo )
 
 
     if (config.texture.enableMipmap)
-    {
-    	glEnable(GL_TEXTURE_2D);
         glGenerateMipmap(GL_TEXTURE_2D);
-    }
 }
-
-unsigned char* overrideData = NULL;
-unsigned long int overrideSize;
 
 void TextureCache_Load( CachedTexture *texInfo )
 {
@@ -748,7 +741,7 @@ void TextureCache_Load( CachedTexture *texInfo )
         LOG(LOG_WARNING, "No Texture Conversion function available, size=%i format=%i\n", texInfo->size, texInfo->format);
     }
 
-     switch(texFormat.format)
+    switch(texFormat.format)
     {
         case FORMAT_I8:
             glFormat = GL_LUMINANCE;
@@ -864,7 +857,7 @@ void TextureCache_Load( CachedTexture *texInfo )
     if (!config.texture.sai2x || (texFormat.format == FORMAT_I8) || (texFormat.format == FORMAT_IA88))
     {
 #ifdef PRINT_TEXTUREFORMAT
-        printf("j=%i DEST=0x%x SIZE=%i F=0x%x, W=%i, H=%i, T=0x%x\n", j, dest, texInfo->textureBytes,glFormat, glWidth, glHeight, glType); fflush(stdout);
+        printf("j=%u DEST=0x%x SIZE=%i F=0x%x, W=%i, H=%i, T=0x%x\n", j, dest, texInfo->textureBytes,glFormat, glWidth, glHeight, glType); fflush(stdout);
 #endif
         glTexImage2D( GL_TEXTURE_2D, 0, glFormat, glWidth, glHeight, 0, glFormat, glType, dest);
     }
@@ -883,7 +876,6 @@ void TextureCache_Load( CachedTexture *texInfo )
         else
             _2xSaI5551( (u16*)dest, (u16*)scaledDest, texInfo->realWidth, texInfo->realHeight, 1, 1 );
 
-
         glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, texInfo->realWidth << 1, texInfo->realHeight << 1, 0, GL_RGBA, glType, scaledDest );
 
         free( scaledDest );
@@ -892,10 +884,7 @@ void TextureCache_Load( CachedTexture *texInfo )
     free(dest);
 
     if (config.texture.enableMipmap)
-    {
-
         glGenerateMipmap(GL_TEXTURE_2D);
-    }
 
 }
 
@@ -966,7 +955,7 @@ void TextureCache_ActivateTexture( u32 t, CachedTexture *texture )
 
     if (config.texture.maxAnisotropy > 0)
     {
-        //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, config.texture.maxAnisotropy);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, config.texture.maxAnisotropy);
     }
 
     texture->lastDList = RSP.DList;
@@ -1139,8 +1128,8 @@ void TextureCache_Update( u32 t )
 
     if (gDP.textureMode == TEXTUREMODE_TEXRECT)
     {
-        u16 texRectWidth = gDP.texRect.width - gSP.textureTile[t]->uls;
-        u16 texRectHeight = gDP.texRect.height - gSP.textureTile[t]->ult;
+        u32 texRectWidth = gDP.texRect.width - gSP.textureTile[t]->uls;
+        u32 texRectHeight = gDP.texRect.height - gSP.textureTile[t]->ult;
 
         if (gSP.textureTile[t]->masks && ((maskWidth * maskHeight) <= maxTexels))
             width = maskWidth;
@@ -1150,7 +1139,7 @@ void TextureCache_Update( u32 t )
             width = tileWidth;
         else if ((texRectWidth * tileHeight) <= maxTexels)
             width = gDP.texRect.width;
-        else if ((unsigned int)(texRectWidth * texRectHeight) <= maxTexels)
+        else if ((texRectWidth * texRectHeight) <= maxTexels)
             width = gDP.texRect.width;
         else if (gDP.loadType == LOADTYPE_TILE)
             width = loadWidth;
@@ -1165,7 +1154,7 @@ void TextureCache_Update( u32 t )
             height = gDP.texRect.height;
         else if ((texRectWidth * tileHeight) <= maxTexels)
             height = tileHeight;
-        else if ((unsigned int)(texRectWidth * texRectHeight) <= maxTexels)
+        else if ((texRectWidth * texRectHeight) <= maxTexels)
             height = gDP.texRect.height;
         else if (gDP.loadType == LOADTYPE_TILE)
             height = loadHeight;

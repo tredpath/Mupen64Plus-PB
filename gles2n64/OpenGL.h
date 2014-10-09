@@ -5,6 +5,12 @@
 #include <GLES2/gl2ext.h>
 #include "gSP.h"
 
+#ifdef USE_SDL
+//    #include <EGL/egl.h>  // Android 2.3 only
+//    #include <GLES2/gl2extimg.h>
+    #include <SDL.h>
+#endif
+
 #ifndef min
 #define min(a,b) ((a) < (b) ? (a) : (b))
 #endif
@@ -68,6 +74,23 @@ struct GLcolor
 
 struct GLInfo
 {
+#ifdef USE_SDL
+// TODO: More EGL stuff, need to do this in Java
+    SDL_Surface *hScreen;  // TODO: Do we really need this?  Only using it in one place AFAICT..
+/*
+    struct
+    {
+        EGLint		            version_major, version_minor;
+        EGLDisplay              display;
+        EGLContext              context;
+        EGLConfig               config;
+        EGLSurface              surface;
+        EGLNativeDisplayType    device;
+        EGLNativeWindowType     handle;
+    } EGL;
+*/
+#endif
+
     bool    screenUpdate;
 
     struct
@@ -101,13 +124,13 @@ struct GLInfo
         GLubyte     elements[ELEMBUFF_SIZE];
         int         num;
 
-#ifdef __TRIBUFFER_OPT
+//#ifdef __TRIBUFFER_OPT
 
         u32     indexmap[INDEXMAP_SIZE];
         u32     indexmapinv[VERTBUFF_SIZE];
         u32     indexmap_prev;
         u32     indexmap_nomap;
-#endif
+//#endif
 
     } triangles;
 

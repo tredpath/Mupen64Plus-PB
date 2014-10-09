@@ -1,9 +1,8 @@
-#include "gSPNeon.h"
 #include "gSP.h"
+#include "OpenGL.h"
 
-
-#ifdef __NEON_OPT
-void gSPTransformVertex4NEON(u32 v, float mtx[4][4])
+#ifdef __VEC4_OPT
+static void gSPTransformVertex4NEON(u32 v, float mtx[4][4])
 {
     float *ptr = &OGL.triangles.vertices[v].x;
 
@@ -104,7 +103,7 @@ void gSPTransformVertex4NEON(u32 v, float mtx[4][4])
 }
 
 //4x Transform normal and normalize
-void gSPTransformNormal4NEON(u32 v, float mtx[4][4])
+static void gSPTransformNormal4NEON(u32 v, float mtx[4][4])
 {
     void *ptr = (void*)&OGL.triangles.vertices[v].nx;
 	asm volatile (
@@ -185,7 +184,7 @@ void gSPTransformNormal4NEON(u32 v, float mtx[4][4])
 	);
 }
 
-void gSPLightVertex4NEON(u32 v)
+static void gSPLightVertex4NEON(u32 v)
 {
     volatile float result[16];
 
@@ -366,7 +365,7 @@ void gSPLightVertex4NEON(u32 v)
     OGL.triangles.vertices[v+3].b = result[14];
 }
 
-void gSPBillboardVertex4NEON(u32 v)
+static void gSPBillboardVertex4NEON(u32 v)
 {
     int i = 0;
 
@@ -405,8 +404,9 @@ void gSPBillboardVertex4NEON(u32 v)
       "d16", "d17", "memory"
     );
 }
+#endif
 
-void gSPTransformVertexNEON(float vtx[4], float mtx[4][4])
+static void gSPTransformVertexNEON(float vtx[4], float mtx[4][4])
 {
 //optimised using cycle analyser
 #if 0
@@ -455,7 +455,7 @@ void gSPTransformVertexNEON(float vtx[4], float mtx[4][4])
 #endif
 }
 
-void gSPLightVertexNEON(u32 v)
+static void gSPLightVertexNEON(u32 v)
 {
     volatile float result[4];
 
@@ -536,4 +536,28 @@ void gSPLightVertexNEON(u32 v)
     OGL.triangles.vertices[v].g = result[1];
     OGL.triangles.vertices[v].b = result[2];
 }
+
+static void gSPBillboardVertexNEON(u32 v, u32 i)
+{
+    asm volatile (
+    "vld1.32 		{d2, d3}, [%0]			\n\t"	//q1={x0,y0, z0, w0}
+    "vld1.32 		{d4, d5}, [%1]			\n\t"	//q2={x1,y1, z1, w1}
+    "vadd.f32 		q1, q1, q2 			    \n\t"	//q1=q1+q1
+    "vst1.32 		{d2, d3}, [%0] 		    \n\t"	//
+    :: "r"(&OGL.triangles.vertices[v].x), "r"(&OGL.triangles.vertices[i].x)
+    : "d2", "d3", "d4", "d5", "memory"
+    );
+}
+
+void gSPInitNeon()
+{
+#ifdef __VEC4_OPT
+    gSPTransformVertex4 = gSPTransformVertex4NEON;
+    gSPTransformNormal4 = gSPTransformNormal4NEON;
+    gSPLightVertex4 = gSPLightVertex4NEON;
+    gSPBillboardVertex4 = gSPBillboardVertex4NEON;
 #endif
+    gSPTransformVertex = gSPTransformVertexNEON;
+    gSPLightVertex = gSPLightVertexNEON;
+    gSPBillboardVertex = gSPBillboardVertexNEON;
+}

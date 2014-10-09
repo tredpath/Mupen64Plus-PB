@@ -11,6 +11,7 @@
 #include "GBI.h"
 #include "OpenGL.h"
 
+#include "Config.h"
 
 void F3DEX2_Mtx( u32 w0, u32 w1 )
 {

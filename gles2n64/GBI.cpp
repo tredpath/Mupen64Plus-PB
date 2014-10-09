@@ -18,12 +18,12 @@
 #include "F3DPD.h"
 #include "F3DCBFD.h"
 #include "Types.h"
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include "convert.h"
+# include <string.h>
+# include <unistd.h>
+# include <stdlib.h>
+# include "convert.h"
 #include "Common.h"
-#include <SDL.h>
+#include "ticks.h"
 
 #include "CRC.h"
 #include "Debug.h"
@@ -42,7 +42,7 @@ SpecialMicrocodeInfo specialMicrocodes[] =
     {F3DPD, FALSE, 0x1c4f7869, "Perfect Dark"},
     {F3DEX, FALSE, 0x0ace4c3f, "Mario Kart"},
     //{F3DEX, FALSE, 0xda51ccdb, "Rogue Squadron"},
-    //{F3DCBFD, FALSE, 0x1b4ace88, "RSP Gfx ucode F3DEXBG.NoN fifo 2.08  Yoshitaka Yasumoto 1999 Nintendo."},
+    {F3DCBFD, FALSE, 0x1b4ace88, "RSP Gfx ucode F3DEXBG.NoN fifo 2.08  Yoshitaka Yasumoto 1999 Nintendo."},
 };
 
 u32 G_RDPHALF_1, G_RDPHALF_2, G_RDPHALF_CONT;
@@ -333,6 +333,7 @@ void GBI_Destroy()
     }
 }
 
+#ifdef PROFILE_GBI
 void GBI_ProfileInit()
 {
     GBI_ProfileReset();
@@ -340,14 +341,14 @@ void GBI_ProfileInit()
 
 void GBI_ProfileBegin(u32 cmd)
 {
-    GBI.profileTmp = SDL_GetTicks();
+    GBI.profileTmp = ticksGetTicks();
 }
 
 void GBI_ProfileEnd(u32 cmd)
 {
     unsigned int i = 256*GBI.current->type + cmd;
     GBI.profileNum[i]++;
-    GBI.profileTimer[i] += SDL_GetTicks() - GBI.profileTmp;
+    GBI.profileTimer[i] += ticksGetTicks() - GBI.profileTmp;
 }
 
 void
@@ -390,7 +391,7 @@ GBI_ProfilePrint(FILE *file)
             unsigned int t = GBI_GetFuncTime(uc, cmd);
             if (t != 0)
             {
-                fprintf(file, "%s x %i = %i ms (%.2f%%)\n", GBI_GetFuncName(uc,cmd), GBI_GetFuncNum(uc, cmd), t, 100.0f * (float)t / total);
+                fprintf(file, "%s x %i = %u ms (%.2f%%)\n", GBI_GetFuncName(uc,cmd), GBI_GetFuncNum(uc, cmd), t, 100.0f * (float)t / total);
             }
         }
     }
@@ -797,6 +798,7 @@ GBI_GetFuncName(unsigned int ucode, unsigned int cmd)
         }
     }
 }
+#endif
 
 MicrocodeInfo *GBI_DetectMicrocode( u32 uc_start, u32 uc_dstart, u16 uc_dsize )
 {
@@ -910,7 +912,7 @@ MicrocodeInfo *GBI_DetectMicrocode( u32 uc_start, u32 uc_dstart, u16 uc_dsize )
     }
 
     // Let the user choose the microcode
-    LOG(LOG_ERROR, "[gles2n64]: Warning - unknown ucode!!!\n");
+    LOG(LOG_ERROR, "[gln64]: Warning - unknown ucode!!!\n");
     if(last_good_ucode != (u32)-1)
     {
         current->type=last_good_ucode;
