@@ -59,6 +59,9 @@ extern GLint colorLoc;
 extern int disableSound,videoPlugin;
 extern char romName[256];
 extern int initialized_n64;
+extern int controller_overlay;
+extern float touch_save;
+extern float touch_load;
 
 typedef struct
 {
@@ -72,7 +75,16 @@ typedef struct
 	png_byte *raw_pix;
 }UIQuad;
 
+typedef struct
+{
+	char Name[125];
+	int number;
+} bb_cheat;
+
 #define BBUTIL_DEFAULT_FONT "/usr/fonts/font_repository/monotype/arial.ttf"
+
+typedef void (*cheatCallback)(int*, bb_cheat*);
+typedef int (*ptr_emu_command)(int, int, void *);
 
 extern UIQuad* overlayKey;
 extern UIQuad* overlayQuad;
@@ -83,6 +95,7 @@ extern UIQuad* loadButton;
 //UIQuad* toggleAccelerometerButton = NULL;
 extern UIQuad* osd_save;
 extern UIQuad* osd_load;
+extern ptr_emu_command EmuDoCommand;
 
 #ifdef __cplusplus
 extern "C" {
@@ -193,6 +206,9 @@ void render_text(font_t *font, UIQuad*quad);
 UIQuad *create_image(const char* filename, float x, float y,  int raw_pix);
 UIQuad * create_text(font_t *font, float x, float y, char * msg);
 int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *disableSound);
+void dialog_set_cheat_callback(cheatCallback callback);
+int dialog_cheat(char* cheatList);
+int dialog_save();
 
 #ifdef __cplusplus
 }

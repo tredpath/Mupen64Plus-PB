@@ -29,6 +29,7 @@
 #include <bps/bps.h>
 #include <bps/event.h>
 #include <dirent.h>
+#include <signal.h>
 
 #define USING_GL20
 
@@ -60,6 +61,8 @@ static screen_window_t screen_win;
 static screen_display_t screen_disp;
 static int nbuffers = 2;
 static int initialized = 0;
+static int cancel_gs = 0;
+float touch_save = 0.0f, touch_load = 0.0f;
 
 #ifdef USING_GL20
 GLuint text_rendering_program;
@@ -73,6 +76,7 @@ GLint colorLoc;
 int disableSound,videoPlugin;
 char romName[256] = {0};
 int initialized_n64 = 0;
+int controller_overlay = 0;
 UIQuad* overlayKey = NULL;
 UIQuad* overlayQuad = NULL;
 UIQuad* stickQuad = NULL;
@@ -82,6 +86,9 @@ UIQuad* loadButton = NULL;
 //UIQuad* toggleAccelerometerButton = NULL;
 UIQuad* osd_save = NULL;
 UIQuad* osd_load = NULL;
+
+static cheatCallback getCheats = NULL;
+ptr_emu_command EmuDoCommand = NULL;
 
 static void
 bbutil_egl_perror(const char *msg) {
@@ -1113,10 +1120,11 @@ void PB_HandleEvents(void (*keyHandleFunction)(screen_event_t*)){
 				break;
 			case NAVIGATOR_SWIPE_DOWN:
 				//Rom picker
-				rc = dialog_select_game(romName, "shared/misc/n64/roms/", &videoPlugin, &disableSound);
+				/*rc = dialog_select_game(romName, "shared/misc/n64/roms/", &videoPlugin, &disableSound);
 				if (rc == 0) {
 					(*keyHandleFunction)(0);
-				}
+				}*/
+				dialog_save();
 				break;
 			case NAVIGATOR_EXIT:
 				break;
@@ -1141,6 +1149,12 @@ void PB_HandleEvents(void (*keyHandleFunction)(screen_event_t*)){
 				break;
 			}
 		}
+	}
+	if (cancel_gs > 0)
+	{
+		if (cancel_gs == 1)
+			EmuDoCommand(14,103,NULL);
+		cancel_gs--;
 	}
 }
 
@@ -1481,7 +1495,64 @@ enum VIDEO_PLUGIN
 	VIDEO_PLUGIN_GLES2N64
 };
 
-int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *disableSound){
+void dialog_set_cheat_callback(cheatCallback callback)
+{
+	getCheats = callback;
+}
+
+int dialog_select_slot(int isSaving)
+{
+	int retval = -1;
+	int domain = 0;
+	dialog_instance_t dialog = 0;
+	bps_event_t *event;
+	dialog_create_popuplist(&dialog);
+	char* list[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+	dialog_set_popuplist_items(dialog, (char**)list, 10);
+	int slot = 0;
+	if (EmuDoCommand)
+		EmuDoCommand(9, 3, (void*)&slot);
+	int sel[] = { slot };
+	dialog_set_popuplist_selected_indices(dialog, (int*)&sel, 1);
+	dialog_set_title_text(dialog, "Save State");
+
+	dialog_add_button(dialog, DIALOG_CANCEL_LABEL, true, DIALOG_CANCEL_LABEL, true);
+	if (isSaving)
+		dialog_add_button(dialog, "Save", true, DIALOG_OK_LABEL, true);
+	else
+		dialog_add_button(dialog, "Load", true, DIALOG_OK_LABEL, true);
+	dialog_set_popuplist_multiselect(dialog, false);
+	dialog_show(dialog);
+
+	while(1)
+	{
+		bps_get_event(&event, -1);
+
+		if (event)
+		{
+			domain = bps_event_get_domain(event);
+			if (domain == dialog_get_domain())
+			{
+				const char * label = dialog_event_get_selected_context(event);
+				if (strcmp(label, DIALOG_OK_LABEL) == 0)
+				{
+					int *response[1];
+					int num;
+					dialog_event_get_popuplist_selected_indices(event, (int**)response, &num);
+					retval = *response[0];
+					bps_free(response[0]);
+				}
+				break;
+			}
+		}
+	}
+	if (dialog)
+		dialog_destroy(dialog);
+	return retval;
+}
+
+int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *disableSound)
+{
 	char path[MAXPATHLEN];
 	int i, rc;
 
@@ -1499,6 +1570,7 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 	int count=0, domain=0;
 	const char ** list = 0;
 	const char * label;
+	bool cheat = false;
 
 	dirp = opendir(isoDir);
 	if( dirp != NULL ) {
@@ -1546,13 +1618,16 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 		}
 
 		int k = 0;
-		char * compact[count-j+6];
+		char * compact[count-j+9];
 		compact[k++] = "Video Plugin";
 		compact[k++] = "Video Rice";
 		compact[k++] = "GLES2N64";
 		compact[k++] = "Audio Plugin";
 		compact[k++] = "Disable Sound";
-		compact[k++] = "Roms";
+		compact[k++] = "Controller Layout";
+		compact[k++] = "Default";
+		compact[k++] = "Alternate";
+		compact[k++] = "ROMs";
 
 		//For each index
 		for(i=0;i<count;i++){
@@ -1569,17 +1644,19 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 		}
 
 		//Sort compact list
-		qsort( compact+6, k-6, sizeof(char *), compare );
-		int indice[] = {0,3,5};
-		dialog_set_popuplist_items(dialog, compact, k);
-		dialog_set_popuplist_separator_indices(dialog, (int*)&indice, 3);
-		indice[0] = 1;
-		dialog_set_popuplist_selected_indices(dialog, (int*)&indice, 1);
+		qsort( compact+9, k-9, sizeof(char *), compare );
+		int indice[] = {0,3,5,8};
+		dialog_set_popuplist_items(dialog, (char**)compact, k);
+		dialog_set_popuplist_separator_indices(dialog, (int*)&indice, 4);
+		dialog_set_popuplist_header_indices(dialog, (int*)&indice, 4);
+		int sel[] = {1,6};
+		dialog_set_popuplist_selected_indices(dialog, (int*)&sel, 2);
 
 		char* cancel_button_context = "Canceled";
 		char* okay_button_context = "Okay";
 		dialog_add_button(dialog, DIALOG_CANCEL_LABEL, true, cancel_button_context, true);
 		dialog_add_button(dialog, DIALOG_OK_LABEL, true, okay_button_context, true);
+		dialog_add_button(dialog, "CHEAT", true, "CHEAT", true);
 		dialog_set_popuplist_multiselect(dialog, true);
 		dialog_show(dialog);
 
@@ -1594,7 +1671,9 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 					int videoOption = 0;
 					label = dialog_event_get_selected_label(event);
 
-					if(strcmp(label, DIALOG_OK_LABEL) == 0){
+					if(strcmp(label, DIALOG_OK_LABEL) == 0 || strcmp(label, "CHEAT") == 0) {
+						if (strcmp(label, "CHEAT") == 0)
+							cheat = true;
 						dialog_event_get_popuplist_selected_indices(event, (int**)&response, &num);
 						if(num > 0){
 							for(i=0;i<num;i++){
@@ -1610,50 +1689,51 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 							}
 						}
 
-						int vid = 0, sound = 0, rom = 0;
+						int vid = 0, rom = 0, controller = 0;
 						switch(num){
 						case 0:
 						case 1:
-							printf("Must pick at least a video plugin and rom...\n");
-							return -1;
-							break;
 						case 2:
-							if(response[1] == 4 || response[0] == 4){
-								printf("Must pick a Rom...\n");
-								return -1;
-							}
-							*disableSound = 0;
-							if(response[0] == 2 || response[1] == 2){
-								*videoPlugin = VIDEO_PLUGIN_GLES2N64;
-							} else {
-								*videoPlugin = VIDEO_PLUGIN_RICE;
-							}
-							if(response[0] == 2 || response[0] == 1){
-								strcpy(isofilename, compact[response[1]]);
-							}else {
-								strcpy(isofilename, compact[response[0]]);
-							}
-							break;
-						case 3:
-							for(i=0;i<num;i++){
-								if(response[i] == 1){
+							printf("Must pick at least a video plugin, controller layout, and rom...\n");
+							return -1;
+						default:
+							for (i = 0; i < num; i++)
+							{
+								if (response[i] == 1)
+								{
 									vid = 1;
 									*videoPlugin = VIDEO_PLUGIN_RICE;
-								} else if (response[i] == 2){
+								}
+								else if (response[i] == 2)
+								{
 									vid = 1;
 									*videoPlugin = VIDEO_PLUGIN_GLES2N64;
-								} else if (response[i] == 4){
-									sound = 1;
-								} else if( response[i] > 5){
+								}
+								else if (response[i] == 4)
+								{
+									*disableSound = 1;
+								}
+								else if (response[i] == 6)
+								{
+									controller = 1;
+									controller_overlay = 0;
+								}
+								else if (response[i] == 7)
+								{
+									controller = 1;
+									controller_overlay = 1;
+								}
+								else if (response[i] > 8)
+								{
 									rom = 1;
 									strcpy(isofilename, compact[response[i]]);
 								}
 							}
-							if(vid != 1 || sound != 1 || rom != 1){
+							if(vid != 1 || controller != 1 || rom != 1)
+							{
 								printf("Must pick a rom...");fflush(stdout);
 								return -1;
 							}
-							*disableSound = 1;
 							break;
 						}
 						bps_free(response);
@@ -1677,5 +1757,150 @@ int dialog_select_game(char * isofilename, char *isoDir, int *videoPlugin, int *
 		strcpy(isofilename, path);
 	} else
 		isofilename[0] = 0;
+	if (cheat)
+		return 1;
 	return 0;
+}
+
+int dialog_cheat(char* cheatList)
+{
+	int retval = 0;
+	dialog_instance_t context;
+	dialog_request_events(0);
+	dialog_create_popuplist(&context);
+	int size = 0;
+	bb_cheat cheats[256];
+	char cheat_list[2048];
+	memset(cheat_list, 0, 2048);
+	getCheats(&size, cheats);
+	printf("Found %d cheats\n", size);
+	int i;
+	char** list = 0;
+	if (size == 0)
+	{
+		list = (char**)malloc(sizeof(char*));
+		list[0] = "No Cheats Found";
+		size = 1;
+		int dis[] = { 0 };
+		dialog_set_popuplist_disabled_indices(context, dis, 1);
+	}
+	else
+	{
+		list = (char**)malloc(size * sizeof(char*));
+		for (i = 0; i < size; i++)
+		{
+			list[i] = cheats[i].Name;
+		}
+	}
+	dialog_set_popuplist_items(context, (const char**)list, size);
+	dialog_set_popuplist_multiselect(context, true);
+	dialog_add_button(context, DIALOG_CANCEL_LABEL, true, "CANCEL", true);
+	dialog_add_button(context, DIALOG_OK_LABEL, true, "OKAY", true);
+	dialog_set_title_text(context, "Select Cheats");
+	dialog_show(context);
+	char buffer[4];
+
+	while (1)
+	{
+		bps_event_t* event;
+		bps_get_event(&event, -1);
+		if (event)
+		{
+			if (bps_event_get_domain(event) == dialog_get_domain())
+			{
+				const char* context = dialog_event_get_selected_context(event);
+				if (strcmp(context, "CANCEL") == 0)
+				{
+					retval = -1;
+					break;
+				}
+				else if (strcmp(context, "OKAY") == 0)
+				{
+					int *response = NULL;
+					int count;
+					if (dialog_event_get_popuplist_selected_indices(event, (int**)&response, &count) == BPS_SUCCESS)
+					{
+						if (count > 0)
+						{
+							retval = 1;
+							for (i = 0; i < count; i++)
+							{
+								strcat(cheat_list, itoa(cheats[response[i]].number, buffer, 10));
+								if (i != count - 1)
+									strcat(cheat_list, ",");
+							}
+						}
+						bps_free(response);
+					}
+					break;
+				}
+			}
+		}
+	}
+	printf("Selected cheats: %s\n", cheat_list);
+	strcpy(cheatList, cheat_list);
+	cheatList[strlen(cheat_list)] = '\0';
+
+	if (context)
+		dialog_destroy(context);
+	fflush(stdout);
+	return retval;
+}
+
+int dialog_save()
+{
+	dialog_instance_t context;
+	int retval = 0;
+	dialog_request_events(0);
+	dialog_create_context_menu(&context);
+	dialog_set_context_menu_coordinates(context, 512, 975);
+	dialog_context_menu_add_button(context, "Save State", true, "SAVE", true, DIALOG_SAVE_IMAGE_ICON);
+	dialog_context_menu_add_button(context, "Cancel", true, "CANCEL", true, DIALOG_CANCEL_ICON);
+	dialog_context_menu_add_button(context, "GameShark", true, "SHARK", true, DIALOG_NO_ICON);
+	dialog_context_menu_add_button(context, "Load State", true, "LOAD", true, DIALOG_OPEN_LINK_ICON);
+	dialog_set_title_text(context, "Mupen64Plus PB");
+	dialog_show(context);
+
+	while (1)
+	{
+		bps_event_t* event = 0;
+		bps_get_event(&event, -1);
+		if (event)
+		{
+			if (bps_event_get_domain(event) == dialog_get_domain())
+			{
+				const char* cntxt = dialog_event_get_selected_context(event);
+				if (strcmp(cntxt, "SAVE") == 0)
+				{
+					int index = dialog_select_slot(1);
+					if (index >= 0 && EmuDoCommand != NULL)
+					{
+						EmuDoCommand(12, index, NULL);
+						EmuDoCommand(11, 1 ,NULL);
+					}
+				}
+				else if (strcmp(cntxt, "LOAD") == 0)
+				{
+					int index = dialog_select_slot(0);
+					if (index >= 0 && EmuDoCommand != NULL)
+					{
+						EmuDoCommand(12, index, NULL);
+						EmuDoCommand(10, 1, NULL);
+					}
+				}
+				else if (strcmp(cntxt, "SHARK") == 0)
+				{
+					if (EmuDoCommand != NULL)
+					{
+						EmuDoCommand(13,103,NULL);
+						cancel_gs = 5;
+					}
+				}
+				break;
+			}
+		}
+	}
+	if (context)
+		dialog_destroy(context);
+	return retval;
 }
