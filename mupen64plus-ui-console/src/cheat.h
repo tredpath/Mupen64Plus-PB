@@ -35,7 +35,28 @@ typedef enum {
   CHEAT_SHOW_LIST
   } eCheatMode;
 
+  typedef struct {
+     int    address;
+     int   *variables;
+     char **variable_names;
+     int    var_to_use;
+     int    var_count;
+  } cheat_code;
+
+  typedef struct _sCheatInfo {
+    int                 Number;
+    int                 Count;
+    int                 VariableLine;
+    const char         *Name;
+    const char         *Description;
+    cheat_code         *Codes;
+    struct _sCheatInfo *Next;
+    } sCheatInfo;
+
 void CheatStart(eCheatMode CheatMode, char *CheatNumList);
+void CheatFreeAll();
+
+extern sCheatInfo        *l_CheatList;
 
 #endif // #define CHEAT_H
 

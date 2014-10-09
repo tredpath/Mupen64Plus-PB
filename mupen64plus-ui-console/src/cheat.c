@@ -31,29 +31,11 @@
 /* local definitions */
 #define CHEAT_FILE	"mupencheat.txt"
 
-typedef struct {
-   int    address;
-   int   *variables;
-   char **variable_names;
-   int    var_to_use;
-   int    var_count;
-} cheat_code;
-
-typedef struct _sCheatInfo {
-  int                 Number;
-  int                 Count;
-  int                 VariableLine;
-  const char         *Name;
-  const char         *Description;
-  cheat_code         *Codes;
-  struct _sCheatInfo *Next;
-  } sCheatInfo;
-
 /* local variables */
 static m64p_rom_header    l_RomHeader;
 static char              *l_IniText = NULL;
 static char              *l_CheatGameName = NULL;
-static sCheatInfo        *l_CheatList = NULL;
+sCheatInfo        *l_CheatList = NULL;
 static int                l_CheatCodesFound = 0;
 static int                l_RomFound = 0;
 
@@ -109,7 +91,7 @@ static void CheatActivate(sCheatInfo *pCheat)
     printf("UI-Console: activated cheat code %i: %s\n", pCheat->Number, pCheat->Name);
 }
 
-static void CheatFreeAll(void)
+void CheatFreeAll(void)
 {
     if (l_IniText != NULL)
         free(l_IniText);
@@ -361,7 +343,7 @@ void CheatStart(eCheatMode CheatMode, char *CheatNumList)
 
     /* generate section name from ROM's CRC and country code */
     char RomSection[24];
-    sprintf(RomSection, "%X-%X-C:%X", sl(l_RomHeader.CRC1), sl(l_RomHeader.CRC2), l_RomHeader.Country_code & 0xff);
+    sprintf(RomSection, "%08X-%08X-C:%X", sl(l_RomHeader.CRC1), sl(l_RomHeader.CRC2), l_RomHeader.Country_code & 0xff);
 
     /* parse through the cheat INI file and load up any cheat codes found for this ROM */
     ReadCheats(RomSection);
@@ -375,7 +357,7 @@ void CheatStart(eCheatMode CheatMode, char *CheatNumList)
     /* handle the list command */
     if (CheatMode == CHEAT_SHOW_LIST)
     {
-        printf("UI-Console: %i cheat code(s) found for ROM '%s'\n", l_CheatCodesFound, l_CheatGameName);
+        /*printf("UI-Console: %i cheat code(s) found for ROM '%s'\n", l_CheatCodesFound, l_CheatGameName);
         sCheatInfo *pCur = l_CheatList;
         while (pCur != NULL)
         {
@@ -391,7 +373,9 @@ void CheatStart(eCheatMode CheatMode, char *CheatNumList)
             }
             pCur = pCur->Next;
         }
-        CheatFreeAll();
+        CheatFreeAll();*/
+    	l_RomFound = 0;
+    	l_CheatCodesFound = 0;
         return;
     }
 
