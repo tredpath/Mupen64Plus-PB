@@ -117,7 +117,7 @@ ifndef V
 endif
 endif
 
-CXX := C:/bbndk-2.1.0-beta1/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
+CXX := J:/bbndk-2.1.0/host/win32/x86/usr/bin/qcc -V4.4.2,gcc_ntoarmv7le_cpp
 RM       ?= rm -f
 INSTALL  ?= install
 MKDIR ?= mkdir -p
@@ -146,12 +146,16 @@ endif
 
 # list of source files to compile
 SOURCE = \
-	$(SRCDIR)/main.c \
+	$(SRCDIR)/alist.c \
+    $(SRCDIR)/audio.c \
+	$(SRCDIR)/cicx105.c \
 	$(SRCDIR)/jpeg.c \
-	$(SRCDIR)/ucode3.cpp \
-	$(SRCDIR)/ucode2.cpp \
-	$(SRCDIR)/ucode1.cpp \
-	$(SRCDIR)/ucode3mp3.cpp
+	$(SRCDIR)/main.c \
+    $(SRCDIR)/musyx.c \
+	$(SRCDIR)/ucode1.c \
+	$(SRCDIR)/ucode2.c \
+	$(SRCDIR)/ucode3.c \
+	$(SRCDIR)/ucode3mp3.c
 
 # generate a list of object files build, make a temporary directory for them
 OBJECTS := $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(filter %.c, $(SOURCE)))
